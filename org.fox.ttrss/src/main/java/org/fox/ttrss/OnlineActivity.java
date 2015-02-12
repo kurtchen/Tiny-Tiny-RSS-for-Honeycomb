@@ -840,6 +840,8 @@ public class OnlineActivity extends CommonActivity {
 					selectedIndex = 3;
 				} else if (viewMode.equals("unread")) {
 					selectedIndex = 4;
+				} else if (viewMode.equals("tmp_offline")) {
+					selectedIndex = 5;
 				}
 				
 				AlertDialog.Builder builder = new AlertDialog.Builder(this)
@@ -850,7 +852,8 @@ public class OnlineActivity extends CommonActivity {
 										getString(R.string.headlines_all_articles),
 										getString(R.string.headlines_starred),
 										getString(R.string.headlines_published),
-										getString(R.string.headlines_unread) },
+										getString(R.string.headlines_unread),
+										getString(R.string.headlines_tmp_offline)},
 								selectedIndex, new DialogInterface.OnClickListener() {
 									@Override
 									public void onClick(DialogInterface dialog,
@@ -871,6 +874,8 @@ public class OnlineActivity extends CommonActivity {
 										case 4:
 											setViewMode("unread");
 											break;
+										case 5:
+											setViewMode("tmp_offline");
 										}
 										dialog.cancel();
 

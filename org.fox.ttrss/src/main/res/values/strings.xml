@@ -26,6 +26,8 @@
     <string name="menu_unread_feeds">Show unread feeds</string>
     <string name="menu_all_feeds">Show all feeds</string>
     <string name="update_feeds">Refresh</string>
+    <string name="article_temp_offline">Article temp offline</string>
+    <string name="delete_temp_offline_article">Delete temp offline article</string>
     <string name="share_article">Share article</string>
     <string name="catchup">Mark read</string>
     <string name="sort_feeds_by_unread">Sort feeds by unread count</string>
@@ -197,6 +199,7 @@
     <string name="headlines_starred">Starred</string>
     <string name="headlines_published">Published</string>
     <string name="headlines_unread">Unread</string>
+    <string name="headlines_tmp_offline">Temp Offline</string>
     <string name="article_img_open">Open image</string>
     <string name="article_img_share">Share image</string>
     <string name="requires_api5">Requires tt-rss 1.7.6</string>
@@ -263,4 +266,8 @@
     <string name="headline_display_mode_default">Default</string>
     <string name="headline_display_mode_no_images">No images</string>
     <string name="headline_display_mode_compact">Compact</string>
+
+    <string name="tmp_offline_downloading">Downloading %1$s</string>
+    <string name="tmp_offline_download_success">Download %1$s successful</string>
+    <string name="tmp_offline_download_fail">Failed to download %1$s</string>
 </resources>

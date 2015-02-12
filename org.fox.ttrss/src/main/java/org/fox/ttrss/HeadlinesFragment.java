@@ -11,8 +11,10 @@ import android.graphics.Bitmap;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.support.v4.widget.SwipeRefreshLayout;
@@ -43,7 +45,9 @@ import android.widget.TextView;
 
 import com.amulyakhare.textdrawable.TextDrawable;
 import com.amulyakhare.textdrawable.util.ColorGenerator;
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.nostra13.universalimageloader.core.DisplayImageOptions;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.assist.FailReason;
@@ -62,11 +66,16 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.security.MessageDigest;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.TimeZone;
 
 public class HeadlinesFragment extends Fragment implements OnItemClickListener, OnScrollListener {
@@ -261,6 +270,38 @@ public class HeadlinesFragment extends Fragment implements OnItemClickListener, 
 				m_adapter.notifyDataSetChanged();
 			}
 			return true;
+		case R.id.headlines_article_temp_offline:
+			if (true) {
+				ArticleList selected = getSelectedArticles();
+				String viewMode = m_activity.getViewMode();
+				if ("tmp_offline".equals(viewMode)) {
+					if (selected.size() > 0) {
+						deleteTempOfflineArticles(selected);
+					} else {
+						Article article = getArticleAtPosition(info.position);
+						ArticleList arList = new ArticleList();
+						arList.add(article);
+						deleteTempOfflineArticles(arList);
+					}
+				} else {
+					if (selected.size() > 0) {
+						Intent i = new Intent(m_activity, TempOfflineDownloadService.class);
+						Bundle extras = new Bundle();
+						extras.putParcelable("article_list", selected);
+						i.putExtras(extras);
+						m_activity.startService(i);
+					} else {
+						Article article = getArticleAtPosition(info.position);
+						if (article != null) {
+							Intent i = new Intent(m_activity, TempOfflineDownloadService.class);
+							i.putExtra("article", article);
+							m_activity.startService(i);
+						}
+					}
+				}
+				m_adapter.notifyDataSetChanged();
+			}
+			return true;
 		default:
 			Log.d(TAG, "onContextItemSelected, unhandled id=" + item.getItemId());
 			return super.onContextItemSelected(item);
@@ -284,7 +325,15 @@ public class HeadlinesFragment extends Fragment implements OnItemClickListener, 
             menu.setHeaderTitle(Html.fromHtml(article.title));
             menu.setGroupVisible(R.id.menu_group_single_article, true);
 		}
-		
+
+		String viewMode = m_activity.getViewMode();
+		MenuItem tmpOfflineItem = menu.findItem(R.id.headlines_article_temp_offline);
+		if ("tmp_offline".equals(viewMode)) {
+			tmpOfflineItem.setTitle(R.string.delete_temp_offline_article);
+		} else {
+			tmpOfflineItem.setTitle(R.string.article_temp_offline);
+		}
+
 		menu.findItem(R.id.set_labels).setEnabled(m_activity.getApiLevel() >= 1);
 		menu.findItem(R.id.article_set_note).setEnabled(m_activity.getApiLevel() >= 1); 
 
@@ -430,6 +479,12 @@ public class HeadlinesFragment extends Fragment implements OnItemClickListener, 
 	
 	@SuppressWarnings({ "serial" })
 	public void refresh(boolean append, boolean userInitiated) {
+
+		if (handleTempOfflineMode()) {
+			Log.d(TAG, "refresh by temp offline mode, get out");
+			return;
+		}
+
 		if (m_activity != null && m_feed != null) {
 			m_refreshInProgress = true;
 
@@ -1191,5 +1246,148 @@ public class HeadlinesFragment extends Fragment implements OnItemClickListener, 
 
 	public Feed getFeed() {
 		return m_feed;
+	}
+
+	private boolean handleTempOfflineMode() {
+		boolean handled = false;
+
+		String viewMode = m_activity.getViewMode();
+		if ("tmp_offline".equals(viewMode)) {
+
+			new AsyncTask<Integer, Integer, List<Article>>() {
+				protected void onPreExecute() {
+					m_articles.clear();
+				}
+
+				protected List<Article> doInBackground(Integer... params) {
+					List<Article> results = null;
+					File appFilesDir = new File(Environment.getExternalStorageDirectory(), "ttrss/tmp_offline");
+					if (appFilesDir.exists()) {
+						File[] articleFiles = appFilesDir.listFiles();
+						if (articleFiles != null && articleFiles.length > 0) {
+							results = new ArrayList<Article>();
+							Gson gson = new Gson();
+							StringBuilder savedArticle = new StringBuilder();
+							int count = 0;
+							for (File f : articleFiles) {
+								savedArticle.setLength(0);
+								count = readFileContent(f, savedArticle);
+								if (count > 0) {
+									JsonParser parser = new JsonParser();
+									JsonElement result = parser.parse(savedArticle.toString());
+									results.add(gson.fromJson(result, Article.class));
+								}
+							}
+						}
+					}
+					return results;
+				}
+
+				protected void onPostExecute(List<Article> results) {
+					if (isDetached()) return;
+
+					if (isAdded()) {
+                        if (m_swipeLayout != null) m_swipeLayout.setRefreshing(false);
+					}
+
+					m_refreshInProgress = false;
+					m_activeArticle = null;
+
+					if (results != null && results.size() > 0) {
+						m_articles.addAll(results);
+					}
+
+					m_adapter.notifyDataSetChanged();
+					m_listener.onHeadlinesLoaded(false);
+				}
+			}.execute(0);
+
+			handled = true;
+		}
+
+		return handled;
+	}
+
+	private int readFileContent(File f, StringBuilder out) {
+		int result = -1;
+		if (f == null && out == null) return result;
+
+		String line = null;
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new FileReader(f));
+			while ((line = br.readLine()) != null) {
+				out.append(line);
+			}
+			result = out.length();
+		} catch (Exception e) {
+			Log.e(TAG, "failed to read file", e);
+		} finally {
+			if (br != null) {
+				try {
+					br.close();
+				} catch (Exception e1) {
+					Log.e(TAG, "failed to close file", e1);
+				}
+			}
+		}
+		return result;
+	}
+
+	private void deleteTempOfflineArticles(ArticleList arList) {
+		new AsyncTask<ArticleList, Integer, ArticleList>() {
+			protected void onPreExecute() {
+			}
+
+			protected ArticleList doInBackground(ArticleList... params) {
+				ArticleList results = null;
+				ArticleList delArList = params[0];
+
+				File appFilesDir = new File(Environment.getExternalStorageDirectory(), "ttrss/tmp_offline");
+				if (appFilesDir.exists()) {
+					try {
+						results = new ArticleList();
+						MessageDigest md = MessageDigest.getInstance("SHA-1");
+						byte[] fileNameBytes = null;
+						String fileName = null;
+						File f = null;
+						for (Article ar : delArList) {
+							fileNameBytes = md.digest(ar.link.getBytes());
+							fileName = TempOfflineDownloadService.toHex(fileNameBytes);
+							f = new File(appFilesDir.getAbsolutePath() + "/" + fileName);
+							if (!f.exists() || f.delete()) {
+								results.add(ar);
+							}
+						}
+					} catch (Exception e) {
+						Log.e(TAG, "failed to delete temp offline articles", e);
+					}
+				}
+
+				return results;
+			}
+
+			protected void onPostExecute(ArticleList results) {
+				if (isDetached()) return;
+
+				if (isAdded()) {
+					if (m_swipeLayout != null) m_swipeLayout.setRefreshing(false);
+				}
+
+				m_refreshInProgress = false;
+				m_activeArticle = null;
+
+				if (results != null && results.size() > 0) {
+					for (Article ar : results) {
+						if (m_articles.contains(ar)) {
+							m_articles.remove(ar);
+						}
+					}
+				}
+
+				m_adapter.notifyDataSetChanged();
+				m_listener.onHeadlinesLoaded(false);
+			}
+		}.execute(arList);
 	}
 }

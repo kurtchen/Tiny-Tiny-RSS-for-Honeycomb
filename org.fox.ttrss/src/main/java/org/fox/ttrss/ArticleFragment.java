@@ -21,6 +21,7 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.webkit.WebBackForwardList;
 import android.webkit.WebChromeClient;
+import android.webkit.WebViewClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebView.HitTestResult;
@@ -382,6 +383,14 @@ public class ArticleFragment extends Fragment  {
                     }
                 }
 
+                m_web.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        view.loadUrl(url);
+                        return false;
+                    }
+                });
+
 				if (m_prefs.getBoolean("justify_article_text", true)) {
 					cssOverride += "body { text-align : justify; } ";
 				}
@@ -430,7 +439,8 @@ public class ArticleFragment extends Fragment  {
 						}					
 					}
 				}
-				
+				String altContent = m_article.getAlternativeContent();
+                content += altContent == null ? "" : altContent;
 				content += "</body></html>";
 					
 				try {

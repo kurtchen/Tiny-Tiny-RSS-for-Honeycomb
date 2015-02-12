@@ -13,6 +13,11 @@
         app:showAsAction=""
         android:title="@string/context_selection_toggle_published"/>
 
+    <item
+        android:id="@+id/headlines_article_temp_offline"
+        app:showAsAction=""
+        android:title="@string/article_temp_offline"/>
+
     <group android:id="@+id/menu_group_single_article" >
         <item
             android:id="@+id/headlines_share_article"

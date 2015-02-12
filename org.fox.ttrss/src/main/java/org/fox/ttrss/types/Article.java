@@ -115,4 +115,18 @@ public class Article implements Parcelable {
                 return new Article[size];
             }
         };
+
+    public String getAlternativeContent() {
+        if (link != null && link.contains("cnbeta.com")) {
+            return "<p><a href=\"http://kurtchen.com/lab/cleanbeta/?url=" + link + "\">CleanBeta</a></p>";
+        }
+        return null;
+    }
+
+    public String getFullArticleLink() {
+        if (link != null && link.contains("cnbeta.com")) {
+            return "http://kurtchen.com/lab/cleanbeta/?url=" + link;
+        }
+        return null;
+    }
 }
