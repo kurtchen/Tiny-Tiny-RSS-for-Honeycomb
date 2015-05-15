@@ -16,6 +16,7 @@ import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
@@ -589,4 +590,14 @@ public class ArticleFragment extends Fragment  {
 		m_activity = (HeadlinesActivity)activity;
 
 	}
+
+    @Override
+    public boolean onContextItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.article_link_open_inplace:
+                m_web.loadUrl(m_article.link);
+                return true;
+        }
+        return false;
+    }
 }

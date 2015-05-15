@@ -10,3 +10,6 @@ Thumbs.db
 .idea/datasources.xml
 .idea/dataSources.ids
 .idea/libraries
+.syntastic_javac_config
+myfilenametags
+tags

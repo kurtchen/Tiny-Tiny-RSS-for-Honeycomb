@@ -2,12 +2,15 @@ package org.fox.ttrss.types;
 
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
 
 // TODO: serialize Labels
 public class Article implements Parcelable {
+    private static final String TAG = "Article";
+
 	public int id;
 	public boolean unread; 
 	public boolean marked; 
@@ -119,6 +122,8 @@ public class Article implements Parcelable {
     public String getAlternativeContent() {
         if (link != null && link.contains("cnbeta.com")) {
             return "<p><a href=\"http://kurtchen.com/lab/cleanbeta/?url=" + link + "\">CleanBeta</a></p>";
+        } else if (link != null && link.contains("xkcd.com")) {
+            return "<p><a href=\"" + getFullArticleLink() + "\">Explain xkcd</a></p>";
         }
         return null;
     }
@@ -126,6 +131,21 @@ public class Article implements Parcelable {
     public String getFullArticleLink() {
         if (link != null && link.contains("cnbeta.com")) {
             return "http://kurtchen.com/lab/cleanbeta/?url=" + link;
+        } else if (link != null && link.contains("xkcd.com")) {
+            // e.g. http://xkcd.com/1487/
+            String[] elemenets = link.split("/");
+            String idStr = null;
+            if (elemenets != null && elemenets.length > 0) {
+                idStr = elemenets[elemenets.length - 1];
+                try {
+                    Integer.parseInt(idStr);
+                } catch (NumberFormatException e) {
+                    idStr = null;
+                    Log.e(TAG, "unexpected xkcd link", e);
+                }
+            }
+            if (idStr != null)
+                return "http://kurtchen.com/lab/htmlpurifier?url=http://www.explainxkcd.com/wiki/index.php/" + idStr;
         }
         return null;
     }

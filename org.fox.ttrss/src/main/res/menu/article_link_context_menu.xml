@@ -10,4 +10,8 @@
         app:showAsAction=""
         android:title="@string/article_link_copy"/>
 
+    <item
+        android:id="@+id/article_link_open_inplace"
+        app:showAsAction=""
+        android:title="@string/article_link_open_inplace"/>
 </menu>
