@@ -8,7 +8,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
@@ -25,6 +24,7 @@ import org.fox.ttrss.types.Article;
 import org.fox.ttrss.types.ArticleList;
 import org.fox.ttrss.types.Feed;
 import org.fox.ttrss.types.FeedCategory;
+import org.fox.ttrss.widget.SmallWidgetProvider;
 
 import java.util.Date;
 import java.util.HashMap;
@@ -50,7 +50,7 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 				.getDefaultSharedPreferences(getApplicationContext());
 
 		setAppTheme(m_prefs);
-		
+
 		super.onCreate(savedInstanceState);
 
 		setContentView(R.layout.headlines);
@@ -63,11 +63,27 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 
         if (m_drawerLayout != null) {
 
+            View drawerList = findViewById(R.id.feeds_fragment);
+
+
+            int minWidth = dpToPx(240);
+            int maxWidth = dpToPx(320);
+
+            int width = (int)((float)getResources().getDisplayMetrics().widthPixels * 0.7f);
+
+            if (width < minWidth) width = minWidth;
+            if (width > maxWidth) width = maxWidth;
+
+            DrawerLayout.LayoutParams params = (android.support.v4.widget.DrawerLayout.LayoutParams) drawerList.getLayoutParams();
+            params.width = width;
+            drawerList.setLayoutParams(params);
+
             m_drawerToggle = new ActionBarDrawerToggle(this, m_drawerLayout, R.string.blank, R.string.blank) {
                 @Override
                 public void onDrawerOpened(View drawerView) {
                     super.onDrawerOpened(drawerView);
 
+                    getSupportActionBar().show();
                     invalidateOptionsMenu();
                 }
 
@@ -136,9 +152,9 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 			//m_pullToRefreshAttacher.setRefreshing(true);
 
 			FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
-							
+
 			if (m_prefs.getBoolean("enable_cats", false)) {
-				ft.replace(R.id.feeds_fragment, new FeedCategoriesFragment(), FRAG_CATS);				
+				ft.replace(R.id.feeds_fragment, new FeedCategoriesFragment(), FRAG_CATS);
 			} else {
 				ft.replace(R.id.feeds_fragment, new FeedsFragment(), FRAG_FEEDS);
 			}
@@ -221,46 +237,31 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
     }
 
 	public void onFeedSelected(Feed feed, final boolean selectedByUser) {
-		GlobalState.getInstance().m_loadedArticles.clear();
-		//m_pullToRefreshAttacher.setRefreshing(true);
 
-			FragmentTransaction ft = getSupportFragmentManager()
-					.beginTransaction();
+        FragmentTransaction ft = getSupportFragmentManager()
+                .beginTransaction();
 
-			ft.replace(R.id.headlines_fragment, new LoadingFragment(), null);
-			ft.commit();
+        HeadlinesFragment hf = new HeadlinesFragment();
+        hf.initialize(feed);
 
-			final Feed fFeed = feed;
-			
-			new Handler().postDelayed(new Runnable() {
-				@Override
-				public void run() {
-					FragmentTransaction ft = getSupportFragmentManager()
-							.beginTransaction();
+        ft.replace(R.id.headlines_fragment, hf, FRAG_HEADLINES);
 
-					HeadlinesFragment hf = new HeadlinesFragment();
-					hf.initialize(fFeed);
-					ft.replace(R.id.headlines_fragment, hf, FRAG_HEADLINES);
-					
-					ft.commit();
+        ft.commit();
 
-					m_feedIsSelected = true;
-                    m_userFeedSelected = selectedByUser;
-					//m_feedWasSelected = true;
-					
-					if (m_drawerLayout != null) {
-                        m_drawerLayout.closeDrawers();
-					}
-				}
-			}, 10);
-			
+        m_feedIsSelected = true;
+        m_userFeedSelected = selectedByUser;
+        //m_feedWasSelected = true;
 
-			Date date = new Date();
+        if (m_drawerLayout != null) {
+            m_drawerLayout.closeDrawers();
+        }
 
-			if (date.getTime() - m_lastRefresh > 10000) {
-				m_lastRefresh = date.getTime();
-				refresh(false);
-			}
+        Date date = new Date();
+
+        if (date.getTime() - m_lastRefresh > 10000) {
+            m_lastRefresh = date.getTime();
+            refresh(false);
+        }
 	}
 	
 	public void onCatSelected(FeedCategory cat, boolean openAsFeed) {
@@ -423,24 +424,19 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 		invalidateOptionsMenu();
 	}
 
-	public void openFeedArticles(Feed feed) {
-		GlobalState.getInstance().m_loadedArticles.clear();
+	/* public void openFeedArticles(Feed feed) {
+		//GlobalState.getInstance().m_loadedArticles.clear();
 		
 		Intent intent = new Intent(FeedsActivity.this, HeadlinesActivity.class);
 		intent.putExtra("feed", feed);
 		intent.putExtra("article", (Article)null);
 		intent.putExtra("searchQuery", (String)null);
- 	   
+
 		startActivityForResult(intent, HEADLINES_REQUEST);
 		overridePendingTransition(R.anim.right_slide_in, 0);
-	}
+	} */
 	
 	public void onArticleSelected(Article article, boolean open) {
-		if (article.unread) {
-			article.unread = false;
-			saveArticleUnread(article);
-		}
-		
 		if (open) {
 			HeadlinesFragment hf = (HeadlinesFragment)getSupportFragmentManager().findFragmentByTag(FRAG_HEADLINES);
 
@@ -448,16 +444,38 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 			intent.putExtra("feed", hf.getFeed());
 			intent.putExtra("article", article);
 			intent.putExtra("searchQuery", hf.getSearchQuery());
-	 	   
-			startActivityForResult(intent, HEADLINES_REQUEST);
-			overridePendingTransition(R.anim.right_slide_in, 0);
+            //intent.putExtra("articles", (Parcelable)hf.getAllArticles());
+            GlobalState.getInstance().tmpArticleList = hf.getAllArticles();
+
+            /* if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                startActivityForResult(intent, HEADLINES_REQUEST, ActivityOptions.makeSceneTransitionAnimation(this).toBundle());
+            } else {
+                startActivityForResult(intent, HEADLINES_REQUEST);
+            } */
+
+            // mysterious crashes somewhere in gl layer (?) on some feeds if we use activitycompat transitions here on LP so welp
+            startActivityForResult(intent, HEADLINES_REQUEST);
+
 
 		} else {
 			invalidateOptionsMenu();
-		}
+
+            if (article.unread) {
+			    article.unread = false;
+			    saveArticleUnread(article);
+		    }
+        }
 	}
 
-	@Override
+    @Override
+    public void onStop() {
+        super.onStop();
+
+        Intent updateWidgetIntent = new Intent(SmallWidgetProvider.ACTION_REQUEST_UPDATE);
+        sendBroadcast(updateWidgetIntent);
+    }
+
+    @Override
 	public void onArticleSelected(Article article) {
 		onArticleSelected(article, true);		
 	}
@@ -475,8 +493,23 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		if (requestCode == HEADLINES_REQUEST) {
-			GlobalState.getInstance().m_activeArticle = null;			
+		if (requestCode == HEADLINES_REQUEST && data != null) {
+			//GlobalState.getInstance().m_activeArticle = null;
+
+            //ArrayList<Article> tmp = data.getParcelableArrayListExtra("articles");
+            Article article = data.getParcelableExtra("activeArticle");
+            ArticleList articles = GlobalState.getInstance().tmpArticleList;
+
+            if (articles != null) {
+                HeadlinesFragment hf = (HeadlinesFragment)getSupportFragmentManager().findFragmentByTag(FRAG_HEADLINES);
+
+                if (hf != null) {
+                    hf.setArticles(articles);
+                    hf.setActiveArticle(article);
+                }
+            }
+
+
 		}		
 	}
 
@@ -491,7 +524,7 @@ public class FeedsActivity extends OnlineActivity implements HeadlinesEventListe
 		
 		intent.putExtra(Intent.EXTRA_SHORTCUT_NAME, feed.title);
 		intent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, shortcutIntent);
-		intent.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(this, R.drawable.icon));  
+		intent.putExtra(Intent.EXTRA_SHORTCUT_ICON_RESOURCE, Intent.ShortcutIconResource.fromContext(this, R.drawable.ic_launcher));
 		intent.putExtra("duplicate", false);
 		
 		sendBroadcast(intent);

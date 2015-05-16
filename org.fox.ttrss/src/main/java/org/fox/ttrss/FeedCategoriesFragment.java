@@ -15,6 +15,7 @@ import android.support.v4.widget.SwipeRefreshLayout;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.view.InflateException;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -39,6 +40,8 @@ import org.fox.ttrss.types.FeedCategory;
 import org.fox.ttrss.types.FeedCategoryList;
 
 import java.lang.reflect.Type;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -53,8 +56,9 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 	private FeedCategory m_selectedCat;
 	private FeedsActivity m_activity;
 	private SwipeRefreshLayout m_swipeLayout;
+    private ListView m_list;
 
-	@SuppressLint("DefaultLocale")
+    @SuppressLint("DefaultLocale")
 	class CatUnreadComparator implements Comparator<FeedCategory> {
 		@Override
 		public int compare(FeedCategory a, FeedCategory b) {
@@ -177,7 +181,7 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 		m_activity.getMenuInflater().inflate(R.menu.category_menu, menu);
 		
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
-		FeedCategory cat = m_adapter.getItem(info.position);
+		FeedCategory cat = (FeedCategory) m_list.getItemAtPosition(info.position);
 		
 		if (cat != null) 
 			menu.setHeaderTitle(cat.title);
@@ -187,7 +191,13 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 	}
 	
 	public FeedCategory getCategoryAtPosition(int position) {
-		return m_adapter.getItem(position);
+        try {
+		    return (FeedCategory) m_list.getItemAtPosition(position);
+        } catch (NullPointerException e) {
+            return null;
+        } catch (IndexOutOfBoundsException e) {
+            return null;
+        }
 	}
 	
 	@Override
@@ -208,19 +218,40 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 			}
 		});
 
-	    if (!m_activity.isCompatMode()) {
-	    	m_swipeLayout.setColorScheme(android.R.color.holo_green_dark, 
-	    		android.R.color.holo_red_dark, 
-	            android.R.color.holo_blue_dark, 
-	            android.R.color.holo_orange_dark);
-	    }
-
-		
-		ListView list = (ListView)view.findViewById(R.id.feeds);		
+		m_list = (ListView)view.findViewById(R.id.feeds);
 		m_adapter = new FeedCategoryListAdapter(getActivity(), R.layout.feeds_row, (ArrayList<FeedCategory>)m_cats);
-		list.setAdapter(m_adapter);
-		list.setOnItemClickListener(this);
-		registerForContextMenu(list);
+
+        if (m_activity.isSmallScreen()) {
+            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
+            m_list.addHeaderView(layout);
+        }
+
+        // TODO: better check
+        if (m_activity.findViewById(R.id.headlines_drawer) != null) {
+            try {
+                View layout = inflater.inflate(R.layout.drawer_header, m_list, false);
+                m_list.addHeaderView(layout, null, false);
+
+                TextView login = (TextView) view.findViewById(R.id.drawer_header_login);
+                TextView server = (TextView) view.findViewById(R.id.drawer_header_server);
+
+                login.setText(m_prefs.getString("login", ""));
+                try {
+                    server.setText(new URL(m_prefs.getString("ttrss_url", "")).getHost());
+                } catch (MalformedURLException e) {
+                    server.setText("");
+                }
+            } catch (InflateException e) {
+                // welp couldn't inflate header i guess
+                e.printStackTrace();
+            } catch (java.lang.UnsupportedOperationException e) {
+                e.printStackTrace();
+            }
+        }
+
+        m_list.setAdapter(m_adapter);
+        m_list.setOnItemClickListener(this);
+        registerForContextMenu(m_list);
 
         View loadingBar = (View) view.findViewById(R.id.feeds_loading_bar);
         loadingBar.setVisibility(View.VISIBLE);
@@ -481,7 +512,13 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 			ImageView icon = (ImageView)v.findViewById(R.id.icon);
 			
 			if (icon != null) {
-				icon.setImageResource(cat.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
+                if (m_activity.isDarkTheme()) {
+                    icon.setImageResource(R.drawable.ic_published);
+                } else {
+                    icon.setImageResource(R.drawable.ic_menu_published_dark);
+                }
+
+				//icon.setImageResource(cat.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
 			}
 
 			ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);

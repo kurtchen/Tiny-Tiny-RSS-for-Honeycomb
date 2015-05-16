@@ -32,7 +32,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
-import com.nostra13.universalimageloader.cache.disc.impl.LimitedAgeDiscCache;
+import com.nostra13.universalimageloader.cache.disc.impl.UnlimitedDiscCache;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
 import com.nostra13.universalimageloader.utils.StorageUtils;
@@ -45,7 +45,6 @@ import org.fox.ttrss.types.Article;
 import org.fox.ttrss.types.ArticleList;
 import org.fox.ttrss.types.Feed;
 import org.fox.ttrss.types.Label;
-import org.fox.ttrss.widget.SmallWidgetProvider;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
@@ -64,6 +63,7 @@ public class OnlineActivity extends CommonActivity {
 	protected Menu m_menu;
 
 	protected int m_offlineModeStatus = 0;
+    protected boolean m_forceDisableActionMode = false;
 	
 	private ActionMode m_headlinesActionMode;
 	private HeadlinesActionModeCallback m_headlinesActionModeCallback;
@@ -107,16 +107,15 @@ public class OnlineActivity extends CommonActivity {
 		public void onDestroyActionMode(ActionMode mode) {
 			m_headlinesActionMode = null;
 
-			HeadlinesFragment hf = (HeadlinesFragment) getSupportFragmentManager().findFragmentByTag(FRAG_HEADLINES);
-			
-			if (hf != null) {
-				ArticleList selected = hf.getSelectedArticles();
-				if (selected.size() > 0) {
-					selected.clear();
-					invalidateOptionsMenu();
-					hf.notifyUpdated();
-				}
-			}
+            if (!m_forceDisableActionMode) {
+                HeadlinesFragment hf = (HeadlinesFragment) getSupportFragmentManager().findFragmentByTag(FRAG_HEADLINES);
+
+                if (hf != null) {
+                    hf.setSelection(HeadlinesFragment.ArticlesSelection.NONE);
+                }
+            }
+
+            invalidateOptionsMenu();
 		}
 		
 		@Override
@@ -165,15 +164,14 @@ public class OnlineActivity extends CommonActivity {
 
 		setContentView(R.layout.login);
 
-		ImageLoaderConfiguration config = new ImageLoaderConfiguration.Builder(getApplicationContext())
-                .diskCache(
-                        new LimitedAgeDiscCache(new File(StorageUtils.getCacheDirectory(getApplicationContext()), "article-images"),
-                        2*24*60*60)) // 2 days
-                .build();
-		ImageLoader.getInstance().init(config);
-		//ImageLoader.getInstance().clearDiskCache();
-
-
+        if (!ImageLoader.getInstance().isInited()) {
+            ImageLoaderConfiguration config = new ImageLoaderConfiguration.Builder(getApplicationContext())
+                    .diskCache(
+                            new UnlimitedDiscCache(new File(StorageUtils.getCacheDirectory(getApplicationContext()), "article-images")))
+                    .build();
+            ImageLoader.getInstance().init(config);
+            ImageLoader.getInstance().clearDiskCache();
+        }
 
 		//m_pullToRefreshAttacher = PullToRefreshAttacher.get(this);
 
@@ -309,15 +307,7 @@ public class OnlineActivity extends CommonActivity {
 
 		return false;
 	}
-	
-	@Override
-	public void onStop() {
-		super.onStop();
-		
-		Intent initialUpdateIntent = new Intent(SmallWidgetProvider.FORCE_UPDATE_ACTION);
-		sendBroadcast(initialUpdateIntent);
-	}
-	
+
 	@Override
 	public void onPause() {
 		super.onPause();
@@ -468,7 +458,7 @@ public class OnlineActivity extends CommonActivity {
  	   
 		startActivityForResult(intent, 0);
 		overridePendingTransition(0, 0);
-	
+
 		if (hasPendingOfflineData())
 			syncOfflineData();
 		
@@ -1369,7 +1359,7 @@ public class OnlineActivity extends CommonActivity {
 	public void saveArticleNote(final Article article, final String note) {
 		ApiRequest req = new ApiRequest(getApplicationContext()) {
 			protected void onPostExecute(JsonElement result) {
-				toast(R.string.notify_article_note_set);
+				//
 			}
 		};
 
@@ -1574,13 +1564,15 @@ public class OnlineActivity extends CommonActivity {
 			
 			HeadlinesFragment hf = (HeadlinesFragment) getSupportFragmentManager().findFragmentByTag(FRAG_HEADLINES);
 				
-			if (hf != null) {
+			if (hf != null && !m_forceDisableActionMode) {
 				if (hf.getSelectedArticles().size() > 0 && m_headlinesActionMode == null) {
 					m_headlinesActionMode = startSupportActionMode(m_headlinesActionModeCallback);
 				} else if (hf.getSelectedArticles().size() == 0 && m_headlinesActionMode != null) { 
 					m_headlinesActionMode.finish();
 				}
-			}
+			} else if (m_forceDisableActionMode && m_headlinesActionMode != null) {
+                m_headlinesActionMode.finish();
+            }
 		}
 	}
 	

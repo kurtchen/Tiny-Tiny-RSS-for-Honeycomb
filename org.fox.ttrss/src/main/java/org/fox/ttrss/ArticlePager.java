@@ -14,7 +14,6 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 
 import com.google.gson.JsonElement;
 import com.viewpagerindicator.UnderlinePageIndicator;
@@ -32,7 +31,7 @@ public class ArticlePager extends Fragment {
 	private PagerAdapter m_adapter;
 	private HeadlinesEventListener m_listener;
 	private Article m_article;
-	private ArticleList m_articles = GlobalState.getInstance().m_loadedArticles;
+	private ArticleList m_articles = new ArticleList(); //m_articles = GlobalState.getInstance().m_loadedArticles;
 	private OnlineActivity m_activity;
 	private String m_searchQuery = "";
 	private Feed m_feed;
@@ -64,9 +63,10 @@ public class ArticlePager extends Fragment {
 		
 	}
 		
-	public void initialize(Article article, Feed feed) {
+	public void initialize(Article article, Feed feed, ArticleList articles) {
 		m_article = article;
 		m_feed = feed;
+        m_articles = articles;
 	}
 
 	public void setSearchQuery(String searchQuery) {
@@ -79,6 +79,7 @@ public class ArticlePager extends Fragment {
 	
 		if (savedInstanceState != null) {
 			m_article = savedInstanceState.getParcelable("article");
+            m_articles = ((HeadlinesActivity)m_activity).m_articles;
 			m_feed = savedInstanceState.getParcelable("feed");
 		}
 		
@@ -91,9 +92,9 @@ public class ArticlePager extends Fragment {
 		m_listener.onArticleSelected(m_article, false);
 
 		pager.setAdapter(m_adapter);
-		
-		UnderlinePageIndicator indicator = (UnderlinePageIndicator)view.findViewById(R.id.article_titles);
-		indicator.setViewPager(pager);
+
+        UnderlinePageIndicator indicator = (UnderlinePageIndicator)view.findViewById(R.id.article_pager_indicator);
+        indicator.setViewPager(pager);
 
 		pager.setCurrentItem(position);
 
@@ -137,11 +138,11 @@ public class ArticlePager extends Fragment {
 	@SuppressWarnings({ "serial" }) 
 	protected void refresh(boolean append) {
 
-		if (!m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
+		/* if (!m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
 			append = false;
-		}
+		} */
 		
-		HeadlinesRequest req = new HeadlinesRequest(getActivity().getApplicationContext(), m_activity, m_feed) {
+		HeadlinesRequest req = new HeadlinesRequest(getActivity().getApplicationContext(), m_activity, m_feed, m_articles) {
 			@Override
 			protected void onProgressUpdate(Integer... progress) {
 				m_activity.setProgress(progress[0] / progress[1] * 10000);
@@ -149,7 +150,7 @@ public class ArticlePager extends Fragment {
 
 			@Override
 			protected void onPostExecute(JsonElement result) {
-				if (isDetached()) return;
+				if (isDetached() || !isAdded()) return;
 
 				super.onPostExecute(result);
 				
@@ -273,21 +274,12 @@ public class ArticlePager extends Fragment {
 	public void onResume() {
 		super.onResume();
 		
-		if (m_articles.size() == 0 || !m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
+		/* if (m_articles.size() == 0 || !m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
 			refresh(false);
 			GlobalState.getInstance().m_activeFeed = m_feed;
-		}
+		} */
 		
 		m_activity.invalidateOptionsMenu();
-
-		if (m_prefs.getBoolean("full_screen_mode", false)) {
-			m_activity.getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                    WindowManager.LayoutParams.FLAG_FULLSCREEN);
-			
-			/* if (!m_activity.isCompatMode()) {
-	            m_activity.getSupportActionBar().hide();
-	        } */
-		}
 	}
 
 	public Article getSelectedArticle() {

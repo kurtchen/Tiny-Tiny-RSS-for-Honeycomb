@@ -37,6 +37,7 @@ public class OfflineFeedCategoriesFragment extends Fragment implements OnItemCli
 	private Cursor m_cursor;
 	private OfflineFeedsActivity m_activity;
     private SwipeRefreshLayout m_swipeLayout;
+    private ListView m_list;
 	
 	@Override
 	public void onCreateContextMenu(ContextMenu menu, View v,
@@ -45,7 +46,7 @@ public class OfflineFeedCategoriesFragment extends Fragment implements OnItemCli
 		getActivity().getMenuInflater().inflate(R.menu.category_menu, menu);
 		
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
-		Cursor cursor = (Cursor)m_adapter.getItem(info.position);
+		Cursor cursor = (Cursor)getCatAtPosition(info.position);
 		
 		if (cursor != null) 
 			menu.setHeaderTitle(cursor.getString(cursor.getColumnIndex("title")));
@@ -139,24 +140,22 @@ public class OfflineFeedCategoriesFragment extends Fragment implements OnItemCli
             }
         });
 
-        if (!m_activity.isCompatMode()) {
-            m_swipeLayout.setColorScheme(android.R.color.holo_green_dark,
-                    android.R.color.holo_red_dark,
-                    android.R.color.holo_blue_dark,
-                    android.R.color.holo_orange_dark);
+		m_list = (ListView)view.findViewById(R.id.feeds);
+
+        if (m_activity.isSmallScreen()) {
+            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
+            m_list.addHeaderView(layout);
         }
 
-		ListView list = (ListView)view.findViewById(R.id.feeds);
-		
 		m_cursor = createCursor();
 		
 		m_adapter = new FeedCategoryListAdapter(getActivity(), R.layout.feeds_row, m_cursor,
 				new String[] { "title", "unread" }, new int[] { R.id.title, R.id.unread_counter }, 0);
 
-		list.setAdapter(m_adapter);
-		list.setOnItemClickListener(this);
-		list.setEmptyView(view.findViewById(R.id.no_feeds));
-		registerForContextMenu(list);
+		m_list.setAdapter(m_adapter);
+		m_list.setOnItemClickListener(this);
+		m_list.setEmptyView(view.findViewById(R.id.no_feeds));
+		registerForContextMenu(m_list);
 
 		return view;    	
 	}
@@ -240,7 +239,7 @@ public class OfflineFeedCategoriesFragment extends Fragment implements OnItemCli
 		public int getItemViewType(int position) {
 			Cursor cursor = (Cursor) this.getItem(position);
 			
-			if (cursor.getLong(0) == m_selectedCatId) {
+			if (!m_activity.isSmallScreen() && cursor.getLong(0) == m_selectedCatId) {
 				return VIEW_SELECTED;
 			} else {
 				return VIEW_NORMAL;				
@@ -320,16 +319,36 @@ public class OfflineFeedCategoriesFragment extends Fragment implements OnItemCli
 	}
 
 	public int getCatIdAtPosition(int position) {
-		Cursor c = (Cursor)m_adapter.getItem(position);
-		
-		if (c != null) {
-			int catId = c.getInt(0);
-			return catId;
-		}
-		
+
+        /* if (m_list != null) {
+            Cursor c = (Cursor) m_list.getItemAtPosition(position);
+
+            if (c != null) {
+                int catId = c.getInt(0);
+                return catId;
+            }
+        } */
+
+        Cursor tmp = getCatAtPosition(position);
+
+        if (tmp != null) {
+            int id = tmp.getInt(0);
+
+            return id;
+        }
+
 		return -10000;
 	}
-	
+
+    public Cursor getCatAtPosition(int position) {
+
+        if (m_list != null) {
+            return (Cursor) m_list.getItemAtPosition(position);
+        }
+
+        return null;
+    }
+
 	public void setSelectedFeedId(int feedId) {
 		m_selectedCatId = feedId;
 		refresh();

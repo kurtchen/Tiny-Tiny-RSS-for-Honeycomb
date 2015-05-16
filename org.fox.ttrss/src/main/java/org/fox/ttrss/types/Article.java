@@ -4,6 +4,9 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
 
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,7 +35,13 @@ public class Article implements Parcelable {
 	public boolean always_display_attachments;
 	public String author;
 	public String note;
-	
+    public boolean selected;
+
+    /* not serialized */
+    public Document articleDoc;
+    public Element flavorImage;
+    public boolean noValidFlavorImage;
+
 	public Article(Parcel in) {
 		readFromParcel(in);
 	}
@@ -75,6 +84,7 @@ public class Article implements Parcelable {
 		out.writeInt(always_display_attachments ? 1 : 0);
 		out.writeString(author);
 		out.writeString(note);
+        out.writeInt(selected ? 1 : 0);
 	}
 	
 	public void readFromParcel(Parcel in) {
@@ -105,6 +115,7 @@ public class Article implements Parcelable {
 		always_display_attachments = in.readInt() == 1;
 		author = in.readString();
 		note = in.readString();
+        selected = in.readInt() == 1;
 	}
 	
 	@SuppressWarnings("rawtypes")

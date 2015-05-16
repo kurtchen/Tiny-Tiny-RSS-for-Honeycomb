@@ -3,9 +3,8 @@
     android:id="@+id/headlines_row_loadmore"
     android:layout_width="fill_parent"
     android:layout_height="wrap_content"
-    android:background="?headlineNormalBackground"
     android:gravity="center"
-    android:padding="5dp"
+    android:padding="16dp"
     android:orientation="horizontal" >
 
 

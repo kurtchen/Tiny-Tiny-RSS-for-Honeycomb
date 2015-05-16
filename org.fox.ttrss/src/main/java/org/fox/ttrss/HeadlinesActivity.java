@@ -1,15 +1,19 @@
 package org.fox.ttrss;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.v4.app.FragmentTransaction;
+import android.support.v4.view.WindowCompat;
 import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.Window;
 
 import org.fox.ttrss.types.Article;
 import org.fox.ttrss.types.ArticleList;
@@ -17,20 +21,24 @@ import org.fox.ttrss.types.Feed;
 
 public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventListener {
 	private final String TAG = this.getClass().getSimpleName();
-	
-	protected SharedPreferences m_prefs;
+	protected ArticleList m_articles = new ArticleList();
 
-	@SuppressLint("NewApi")
+	protected SharedPreferences m_prefs;
+    private Article m_activeArticle;
+
+    @SuppressLint("NewApi")
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		m_prefs = PreferenceManager
 				.getDefaultSharedPreferences(getApplicationContext());
 
 		setAppTheme(m_prefs);
-		
-		super.onCreate(savedInstanceState);
+
+        super.onCreate(savedInstanceState);
 
 		setContentView(R.layout.headlines_articles);
+
+        m_forceDisableActionMode = isPortrait() || isSmallScreen();
 
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         getSupportActionBar().setHomeButtonEnabled(true);
@@ -39,7 +47,13 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 		
 		GlobalState.getInstance().load(savedInstanceState);
 
-		if (savedInstanceState == null) {
+        if (isPortrait() && !isSmallScreen()) {
+            findViewById(R.id.headlines_fragment).setVisibility(View.GONE);
+        }
+
+		if (savedInstanceState != null) {
+            m_articles = savedInstanceState.getParcelable("articles");
+        } else {
 			Intent i = getIntent();
 			
 			if (i.getExtras() != null) {
@@ -55,8 +69,8 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 					String feedTitle = i.getStringExtra("feed_title");
 					
 					tmpFeed = new Feed(feedId, feedTitle, isCat);
-					
-					GlobalState.getInstance().m_loadedArticles.clear();					
+
+					//GlobalState.getInstance().m_loadedArticles.clear();
 				} else {
 					tmpFeed = i.getParcelableExtra("feed");
 				}
@@ -65,13 +79,23 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 				
 				final Article article = i.getParcelableExtra("article");
 				final String searchQuery = i.getStringExtra("searchQuery");
-				
-				FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
 
-				ft.replace(R.id.headlines_fragment, new LoadingFragment(), null);
-				ft.replace(R.id.article_fragment, new LoadingFragment(), null);
-				
-				ft.commit();
+                ArticleList tmp = GlobalState.getInstance().tmpArticleList;
+
+                if (tmp != null) {
+                    m_articles.addAll(tmp);
+                }
+
+                FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
+
+                final HeadlinesFragment hf = new HeadlinesFragment();
+                hf.initialize(feed, article, true, m_articles);
+                hf.setSearchQuery(searchQuery);
+
+                ft.replace(R.id.headlines_fragment, hf, FRAG_HEADLINES);
+                ft.replace(R.id.article_fragment, new LoadingFragment(), null);
+
+                ft.commit();
 				
 				setTitle(feed.title);
 
@@ -80,24 +104,30 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 					public void run() {
 						FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
 
-						HeadlinesFragment hf = new HeadlinesFragment();
-						hf.initialize(feed, article, true);
-						hf.setSearchQuery(searchQuery);
-
 						ArticlePager af = new ArticlePager();
-						af.initialize(article != null ? hf.getArticleById(article.id) : new Article(), feed);
+						af.initialize(article != null ? hf.getArticleById(article.id) : new Article(), feed, m_articles);
 						af.setSearchQuery(searchQuery);
 
-						ft.replace(R.id.headlines_fragment, hf, FRAG_HEADLINES);
 						ft.replace(R.id.article_fragment, af, FRAG_ARTICLE);
 						
 						ft.commit();
-					}
-				}, 25);
-				
+					 }
+				 }, 100);
 			}
 		}
 	}
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        if (!isSmallScreen()) {
+            findViewById(R.id.headlines_fragment).setVisibility(isPortrait() ? View.GONE : View.VISIBLE);
+        }
+
+        m_forceDisableActionMode = isPortrait() || isSmallScreen();
+        invalidateOptionsMenu();
+    }
 
 	@Override
 	protected void refresh() {
@@ -118,7 +148,9 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 	@Override
 	public void onSaveInstanceState(Bundle out) {
 		super.onSaveInstanceState(out);
-		
+
+        out.putParcelable("articles", m_articles);
+
 		GlobalState.getInstance().save(out);
 	}
 	
@@ -126,8 +158,7 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 	public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
 		case android.R.id.home:
-			finish();
-			overridePendingTransition(0, R.anim.right_slide_out);
+            onBackPressed();
 			return true;
 		default:
 			Log.d(TAG, "onOptionsItemSelected, unhandled id=" + item.getItemId());
@@ -194,6 +225,8 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 			saveArticleUnread(article);
 		}
 
+        if (!getSupportActionBar().isShowing()) getSupportActionBar().show();
+
 		if (open) {
 			
 			final Article fArticle = article;
@@ -216,14 +249,16 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 			}
 		}
 
-		GlobalState.getInstance().m_activeArticle = article;
+        m_activeArticle = article;
+
+		//GlobalState.getInstance().m_activeArticle = article;
 		
 		invalidateOptionsMenu();
 		
 	}
 
     public void showSidebar(boolean show) {
-        if (!isSmallScreen()) {
+        if (!isSmallScreen() && !isPortrait()) {
             findViewById(R.id.headlines_fragment).setVisibility(show ? View.VISIBLE : View.GONE);
             invalidateOptionsMenu();
         }
@@ -263,7 +298,7 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 								.beginTransaction();
 
 						ArticlePager af = new ArticlePager();
-						af.initialize(fArticle, fFeed);
+						af.initialize(fArticle, fFeed, m_articles);
 
 						ft.replace(R.id.article_fragment, af, FRAG_ARTICLE);
 						ft.commitAllowingStateLoss();
@@ -275,7 +310,13 @@ public class HeadlinesActivity extends OnlineActivity implements HeadlinesEventL
 	
 	@Override
 	public void onBackPressed() {
-		super.onBackPressed();
-		overridePendingTransition(0, R.anim.right_slide_out);
-	}
+        Intent resultIntent = new Intent();
+
+        GlobalState.getInstance().tmpArticleList = m_articles;
+        resultIntent.putExtra("activeArticle", m_activeArticle);
+
+        setResult(Activity.RESULT_OK, resultIntent);
+
+        super.onBackPressed();
+    }
 }

@@ -1,7 +1,6 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/article_images"
     android:layout_width="fill_parent"
-    android:fitsSystemWindows="true"
     android:background="?headlinesBackground"
     android:layout_height="fill_parent">
 /*
@@ -16,11 +15,28 @@
         android:layout_width="fill_parent"
         android:layout_height="fill_parent" />
 
-    <com.viewpagerindicator.UnderlinePageIndicator
+    <ProgressBar
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/article_images_progress"
+        android:progress="0"
+        android:indeterminate="false"
+        android:layout_above="@+id/article_images_indicator"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginLeft="@dimen/activity_horizontal_margin"
+        android:layout_marginRight="@dimen/activity_horizontal_margin" />
+
+    <me.relex.circleindicator.CircleIndicator
         android:id="@+id/article_images_indicator"
         android:layout_width="fill_parent"
-        android:layout_height="2dp"
+        android:layout_height="40dp"
         android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true" />
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:visibility="invisible" />
 
 </RelativeLayout>

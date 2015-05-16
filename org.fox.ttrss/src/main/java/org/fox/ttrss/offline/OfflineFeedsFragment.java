@@ -46,6 +46,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 	private OfflineFeedsActivity m_activity;
     private SwipeRefreshLayout m_swipeLayout;
     private boolean m_enableParentBtn = false;
+    private ListView m_list;
 
 	public void initialize(int catId, boolean enableParentBtn) {
 		m_catId = catId;
@@ -90,7 +91,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 		getActivity().getMenuInflater().inflate(R.menu.feed_menu, menu);
 		
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
-		Cursor cursor = (Cursor)m_adapter.getItem(info.position);
+		Cursor cursor = (Cursor)getFeedAtPosition(info.position);
 		
 		if (cursor != null) 
 			menu.setHeaderTitle(cursor.getString(cursor.getColumnIndex("title")));
@@ -152,14 +153,12 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
             }
         });
 
-        if (!m_activity.isCompatMode()) {
-            m_swipeLayout.setColorScheme(android.R.color.holo_green_dark,
-                    android.R.color.holo_red_dark,
-                    android.R.color.holo_blue_dark,
-                    android.R.color.holo_orange_dark);
-        }
+		m_list = (ListView)view.findViewById(R.id.feeds);
 
-		ListView list = (ListView)view.findViewById(R.id.feeds);
+        if (m_activity.isSmallScreen()) {
+            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
+            m_list.addHeaderView(layout);
+        }
 
         if (m_enableParentBtn) {
             View layout = inflater.inflate(R.layout.feeds_goback, container, false);
@@ -174,7 +173,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
                 }
             });
 
-            list.addHeaderView(layout, null, false);
+            m_list.addHeaderView(layout, null, false);
         }
 
         m_cursor = createCursor();
@@ -182,10 +181,10 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 		m_adapter = new FeedListAdapter(getActivity(), R.layout.feeds_row, m_cursor,
 				new String[] { "title", "unread" }, new int[] { R.id.title, R.id.unread_counter }, 0);
 
-		list.setAdapter(m_adapter);
-		list.setOnItemClickListener(this);
-		list.setEmptyView(view.findViewById(R.id.no_feeds));
-		registerForContextMenu(list);
+		m_list.setAdapter(m_adapter);
+		m_list.setOnItemClickListener(this);
+		m_list.setEmptyView(view.findViewById(R.id.no_feeds));
+		registerForContextMenu(m_list);
 
 		m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
 		
@@ -278,7 +277,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 		public int getItemViewType(int position) {
 			Cursor cursor = (Cursor) this.getItem(position);
 			
-			if (cursor.getLong(0) == m_selectedFeedId) {
+			if (!m_activity.isSmallScreen() && cursor.getLong(0) == m_selectedFeedId) {
 				return VIEW_SELECTED;
 			} else {
 				return VIEW_NORMAL;				
@@ -381,16 +380,35 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 	}
 
 	public int getFeedIdAtPosition(int position) {
-		Cursor c = (Cursor)m_adapter.getItem(position);
-		
-		if (c != null) {
-			int feedId = c.getInt(0);
-			return feedId;
-		}
-		
+        /* if (m_list != null) {
+            Cursor c = (Cursor) m_list.getItemAtPosition(position);
+
+            if (c != null) {
+                int feedId = c.getInt(0);
+                return feedId;
+            }
+        } */
+
+        Cursor tmp = getFeedAtPosition(position);
+
+        if (tmp != null) {
+            int id = tmp.getInt(0);
+
+            return id;
+        }
+
 		return -10000;
 	}
-	
+
+    public Cursor getFeedAtPosition(int position) {
+
+        if (m_list != null) {
+            return (Cursor) m_list.getItemAtPosition(position);
+        }
+
+        return null;
+    }
+
 	public void setSelectedFeedId(int feedId) {
 		m_selectedFeedId = feedId;
 		refresh();

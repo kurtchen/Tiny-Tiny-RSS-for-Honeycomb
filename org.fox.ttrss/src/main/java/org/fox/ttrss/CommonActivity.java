@@ -36,9 +36,7 @@ public class CommonActivity extends ActionBarActivity {
 	private SQLiteDatabase m_writableDb;
 
 	private boolean m_smallScreenMode = true;
-	private boolean m_compatMode = false;
 	private String m_theme;
-    private boolean m_fullScreen;
 
 	protected SharedPreferences m_prefs;
 
@@ -72,6 +70,11 @@ public class CommonActivity extends ActionBarActivity {
             return true;
         }
         return super.onKeyDown(keyCode, event);
+    }
+
+    // not the same as isSmallScreen() which is mostly about layout being loaded
+    public boolean isTablet() {
+        return getResources().getConfiguration().smallestScreenWidthDp >= 600;
     }
 
 	public void setUnreadOnly(boolean unread) {
@@ -109,8 +112,7 @@ public class CommonActivity extends ActionBarActivity {
 	public void onResume() {
 		super.onResume();
 	
-		if (!m_theme.equals(m_prefs.getString("theme", CommonActivity.THEME_DEFAULT)) ||
-                m_fullScreen != m_prefs.getBoolean("full_screen_mode", false)) {
+		if (!m_theme.equals(m_prefs.getString("theme", CommonActivity.THEME_DEFAULT))) {
 
 			Log.d(TAG, "theme changed, restarting");
 			
@@ -131,21 +133,15 @@ public class CommonActivity extends ActionBarActivity {
 	public void onCreate(Bundle savedInstanceState) {
 		m_prefs = PreferenceManager
 				.getDefaultSharedPreferences(getApplicationContext());
-		
-		if (savedInstanceState != null) {
+
+        if (savedInstanceState != null) {
 			m_theme = savedInstanceState.getString("theme");
-            m_fullScreen = savedInstanceState.getBoolean("fullscreen");
-		} else {		
+		} else {
 			m_theme = m_prefs.getString("theme", CommonActivity.THEME_DEFAULT);
-            m_fullScreen = m_prefs.getBoolean("full_screen_mode", false);
 		}
 		
 		initDatabase();
-				
-		m_compatMode = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.HONEYCOMB;
 
-		Log.d(TAG, "m_compatMode=" + m_compatMode);
-		
 		super.onCreate(savedInstanceState);
 	}
 
@@ -159,15 +155,10 @@ public class CommonActivity extends ActionBarActivity {
 		super.onSaveInstanceState(out);
 		
 		out.putString("theme", m_theme);
-        out.putBoolean("fullscreen", m_fullScreen);
 	}
 	
 	public boolean isSmallScreen() {
 		return m_smallScreenMode;
-	}
-	
-	public boolean isCompatMode() {
-		return m_compatMode;
 	}
 
 	@SuppressWarnings("deprecation")
@@ -214,7 +205,17 @@ public class CommonActivity extends ActionBarActivity {
 			setTheme(R.style.LightTheme);
 		}
 	}
-	
+
+    protected void setDarkAppTheme(SharedPreferences prefs) {
+        String theme = prefs.getString("theme", CommonActivity.THEME_DEFAULT);
+
+        if (theme.equals(THEME_AMBER)) {
+            setTheme(R.style.AmberTheme);
+        } else {
+            setTheme(R.style.DarkTheme);
+        }
+    }
+
 	@SuppressWarnings("deprecation")
 	@SuppressLint("NewApi")
 	protected int getScreenWidthInPixel() {

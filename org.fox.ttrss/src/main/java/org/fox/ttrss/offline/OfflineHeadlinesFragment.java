@@ -7,7 +7,6 @@ import android.content.res.Resources.Theme;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteStatement;
 import android.graphics.Paint;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.BaseColumns;
@@ -42,7 +41,6 @@ import com.amulyakhare.textdrawable.util.ColorGenerator;
 import org.fox.ttrss.CommonActivity;
 import org.fox.ttrss.GlobalState;
 import org.fox.ttrss.R;
-import org.fox.ttrss.util.TypefaceCache;
 import org.jsoup.Jsoup;
 
 import java.text.DateFormat;
@@ -72,6 +70,8 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 	private SwipeRefreshLayout m_swipeLayout;
 
     private boolean m_compactLayoutMode = false;
+    private ListView m_list;
+    private int m_listPreviousVisibleItem;
 	
 	public void initialize(int feedId, boolean isCat, boolean compactMode) {
 		m_feedId = feedId;
@@ -302,20 +302,13 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 			}
 		});
 
-	    if (!m_activity.isCompatMode()) {
-	    	m_swipeLayout.setColorScheme(android.R.color.holo_green_dark, 
-	    		android.R.color.holo_red_dark, 
-	            android.R.color.holo_blue_dark, 
-	            android.R.color.holo_orange_dark);
-	    }
-		
 		m_cursor = createCursor();
 		
-		ListView list = (ListView)view.findViewById(R.id.headlines_list);
+		m_list = (ListView)view.findViewById(R.id.headlines_list);
 
-        if (!m_compactLayoutMode) {
-            list.setDividerHeight(0);
-            list.setDivider(null);
+        if (m_activity.isSmallScreen()) {
+            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
+            m_list.addHeaderView(layout);
         }
 
         if (m_prefs.getBoolean("headlines_mark_read_scroll", false)) {
@@ -327,18 +320,17 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 
             layout.setLayoutParams(new ListView.LayoutParams(ListView.LayoutParams.MATCH_PARENT, screenHeight));
 
-            list.addFooterView(layout, null, false);
+            m_list.addFooterView(layout, null, false);
         }
 
 
         m_adapter = new ArticleListAdapter(getActivity(), R.layout.headlines_row, m_cursor,
 				new String[] { "title" }, new int[] { R.id.title }, 0);
 		
-		list.setAdapter(m_adapter);
-		list.setOnItemClickListener(this);
-        list.setOnScrollListener(this);
-		//list.setEmptyView(view.findViewById(R.id.no_headlines));
-		registerForContextMenu(list);
+		m_list.setAdapter(m_adapter);
+		m_list.setOnItemClickListener(this);
+        m_list.setOnScrollListener(this);
+		registerForContextMenu(m_list);
 
 		return view;    	
 	}
@@ -545,10 +537,10 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
                         layoutId = m_compactLayoutMode ? R.layout.headlines_row_unread_compact : R.layout.headlines_row_unread;
                         break;
                     case VIEW_SELECTED:
-                        layoutId = m_compactLayoutMode ? R.layout.headlines_row_selected_compact : R.layout.headlines_row_selected;
+                        layoutId = m_compactLayoutMode ? R.layout.headlines_row_selected_compact : R.layout.headlines_row;
                         break;
                     case VIEW_SELECTED_UNREAD:
-                        layoutId = m_compactLayoutMode ? R.layout.headlines_row_selected_unread_compact : R.layout.headlines_row_selected_unread;
+                        layoutId = m_compactLayoutMode ? R.layout.headlines_row_selected_unread_compact : R.layout.headlines_row_unread;
                         break;
                 }
 
@@ -621,7 +613,7 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 				
 				holder.titleView.setText(Html.fromHtml(article.getString(article.getColumnIndex("title"))));
 
-				if (m_prefs.getBoolean("enable_condensed_fonts", false)) {
+				/* if (m_prefs.getBoolean("enable_condensed_fonts", false)) {
 					Typeface tf = TypefaceCache.get(m_activity, "sans-serif-condensed", article.getInt(article.getColumnIndex("unread")) == 1 ? Typeface.BOLD : Typeface.NORMAL);
 					
 					if (tf != null && !tf.equals(holder.titleView.getTypeface())) {
@@ -631,8 +623,10 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
                     holder.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, headlineFontSize + 5));
 				} else {
                     holder.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, headlineFontSize + 3));
-				}
-				
+				} */
+
+                holder.titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, headlineFontSize + 3));
+
 				int scoreIndex = article.getColumnIndex("score");
 				if (scoreIndex >= 0)
 					adjustTitleTextView(article.getInt(scoreIndex), holder.titleView, position);
@@ -818,18 +812,20 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 	}
 
 	public Cursor getArticleAtPosition(int position) {
-		return (Cursor) m_adapter.getItem(position);
+		return (Cursor) m_list.getItemAtPosition(position);
 	}
 
 	public int getArticleIdAtPosition(int position) {
-		/*Cursor c = getArticleAtPosition(position);
+		Cursor c = getArticleAtPosition(position);
 		
 		if (c != null) {
 			int id = c.getInt(0);
 			return id;
-		}		*/
-		
-		return (int) m_adapter.getItemId(position);
+		}
+
+        return 0;
+
+		//return (int) m_adapter.getItemId(position + m_list.getHeaderViewsCount());
 	}
 
 	public int getActiveArticleId() {
@@ -839,7 +835,7 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 	public int getArticleIdPosition(int articleId) {
 		for (int i = 0; i < m_adapter.getCount(); i++) {
 			if (articleId == m_adapter.getItemId(i))
-				return i;
+				return i + m_list.getHeaderViewsCount();
 		}
 		
 		return -1;
@@ -869,7 +865,7 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
 
     @Override
     public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
-        if (m_prefs.getBoolean("headlines_mark_read_scroll", false) && firstVisibleItem > 0) {
+        if (m_prefs.getBoolean("headlines_mark_read_scroll", false) && firstVisibleItem > (m_activity.isSmallScreen() ? 1 : 0)) {
             //Article a = m_articles.get(firstVisibleItem - 1);
 
             Cursor article = getArticleAtPosition(firstVisibleItem - 1);
@@ -882,6 +878,20 @@ public class OfflineHeadlinesFragment extends Fragment implements OnItemClickLis
                     m_readArticleIds.add(id);
                 }
             }
+        }
+
+        if (!m_activity.isTablet()) {
+            if (m_adapter.getCount() > 0) {
+                if (firstVisibleItem > m_listPreviousVisibleItem) {
+                    m_activity.getSupportActionBar().hide();
+                } else if (firstVisibleItem < m_listPreviousVisibleItem) {
+                    m_activity.getSupportActionBar().show();
+                }
+            } else {
+                m_activity.getSupportActionBar().show();
+            }
+
+            m_listPreviousVisibleItem = firstVisibleItem;
         }
     }
 

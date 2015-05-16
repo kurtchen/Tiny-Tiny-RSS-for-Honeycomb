@@ -5,18 +5,16 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
-import android.graphics.Color;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.BaseColumns;
 import android.support.v4.app.Fragment;
+import android.support.v7.app.ActionBar;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -25,14 +23,14 @@ import android.view.ViewGroup;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebView.HitTestResult;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.shamanland.fab.ShowHideOnScroll;
 
-import org.fox.ttrss.CommonActivity;
 import org.fox.ttrss.R;
 import org.fox.ttrss.util.ImageCacheService;
-import org.fox.ttrss.util.TypefaceCache;
+import org.fox.ttrss.util.NotifyingScrollView;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -124,9 +122,7 @@ public class OfflineArticleFragment extends Fragment {
 			m_articleId = savedInstanceState.getInt("articleId");
 		}
 		
-		boolean useTitleWebView = m_prefs.getBoolean("article_compat_view", false);
-		
-		View view = inflater.inflate(useTitleWebView ? R.layout.article_fragment_compat : R.layout.article_fragment, container, false);
+		View view = inflater.inflate(R.layout.article_fragment, container, false);
 
 		m_cursor = m_activity.getReadableDb().query("articles LEFT JOIN feeds ON (feed_id = feeds."+BaseColumns._ID+")", 
 				new String[] { "articles.*", "feeds.title AS feed_title" }, "articles." + BaseColumns._ID + "=?", 
@@ -137,35 +133,51 @@ public class OfflineArticleFragment extends Fragment {
 		if (m_cursor.isFirst()) {
             final String link = m_cursor.getString(m_cursor.getColumnIndex("link"));
 
-			if (!useTitleWebView) {
-                View scrollView = view.findViewById(R.id.article_scrollview);
-                View fab = view.findViewById(R.id.article_fab);
+            NotifyingScrollView scrollView = (NotifyingScrollView) view.findViewById(R.id.article_scrollview);
+            View fab = view.findViewById(R.id.article_fab);
 
-                if (scrollView != null && fab != null) {
-                    if (m_prefs.getBoolean("enable_article_fab", true)) {
-                        scrollView.setOnTouchListener(new ShowHideOnScroll(fab));
+            if (scrollView != null && m_activity.isSmallScreen()) {
+                view.findViewById(R.id.article_heading_spacer).setVisibility(View.VISIBLE);
 
-                        fab.setOnClickListener(new OnClickListener() {
-                            @Override
-                            public void onClick(View view) {
-                                try {
-                                    URL url = new URL(link.trim());
-                                    String uri = new URI(url.getProtocol(), url.getUserInfo(), url.getHost(),
-                                            url.getPort(), url.getPath(), url.getQuery(), url.getRef()).toString();
-                                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
-                                    startActivity(intent);
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                    m_activity.toast(R.string.error_other_error);
-                                }
-                            }
-                        });
-                    } else {
-                        fab.setVisibility(View.GONE);
+                scrollView.setOnScrollChangedListener(new NotifyingScrollView.OnScrollChangedListener() {
+                    @Override
+                    public void onScrollChanged(ScrollView who, int l, int t, int oldl, int oldt) {
+                        ActionBar ab = m_activity.getSupportActionBar();
+
+                        if (t >= oldt && t >= ab.getHeight()) {
+                            ab.hide();
+                        } else if (t <= ab.getHeight() | oldt - t >= 10) {
+                            ab.show();
+                        }
+
                     }
+                });
+            }
+
+            if (scrollView != null && fab != null) {
+                if (m_prefs.getBoolean("enable_article_fab", true)) {
+                    scrollView.setOnTouchListener(new ShowHideOnScroll(fab));
+
+                    fab.setOnClickListener(new OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            try {
+                                URL url = new URL(link.trim());
+                                String uri = new URI(url.getProtocol(), url.getUserInfo(), url.getHost(),
+                                        url.getPort(), url.getPath(), url.getQuery(), url.getRef()).toString();
+                                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+                                startActivity(intent);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                m_activity.toast(R.string.error_other_error);
+                            }
+                        }
+                    });
+                } else {
+                    fab.setVisibility(View.GONE);
                 }
-			}
-			
+            }
+
 			int articleFontSize = Integer.parseInt(m_prefs.getString("article_font_size_sp", "16"));
 			int articleSmallFontSize = Math.max(10, Math.min(18, articleFontSize - 2));
 			
@@ -173,7 +185,7 @@ public class OfflineArticleFragment extends Fragment {
 
 			if (title != null) {
 				
-				if (m_prefs.getBoolean("enable_condensed_fonts", false)) {
+				/* if (m_prefs.getBoolean("enable_condensed_fonts", false)) {
 					Typeface tf = TypefaceCache.get(m_activity, "sans-serif-condensed", Typeface.NORMAL);
 					
 					if (tf != null && !tf.equals(title.getTypeface())) {
@@ -183,8 +195,10 @@ public class OfflineArticleFragment extends Fragment {
 					title.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, articleFontSize + 5));
 				} else {
 					title.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, articleFontSize + 3));
-				}
-				
+				} */
+
+                title.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, articleFontSize + 3));
+
 				String titleStr;
 				
 				if (m_cursor.getString(m_cursor.getColumnIndex("title")).length() > 200)
@@ -240,18 +254,13 @@ public class OfflineArticleFragment extends Fragment {
                             unregisterForContextMenu(web);
                             return true;
                         } else {
-                            if (m_activity.isCompatMode()) {
-                                KeyEvent shiftPressEvent = new KeyEvent(0, 0, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_SHIFT_LEFT, 0, 0);
-                                shiftPressEvent.dispatch(web);
-                            }
-
                             return false;
                         }
                     }
                 });
 
                 // prevent flicker in ics
-                if (!m_prefs.getBoolean("webview_hardware_accel", true) || useTitleWebView) {
+                if (!m_prefs.getBoolean("webview_hardware_accel", true)) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.HONEYCOMB) {
                         web.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
                     }
@@ -328,10 +337,6 @@ public class OfflineArticleFragment extends Fragment {
                     "</style>" +
                     "</head>" +
                     "<body>" + articleContent;
-				
-				if (useTitleWebView) {
-					content += "<p>&nbsp;</p><p>&nbsp;</p><p>&nbsp;</p><p>&nbsp;</p>";
-				}
 				
 				content += "</body></html>";
 				

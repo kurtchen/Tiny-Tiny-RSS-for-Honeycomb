@@ -9,7 +9,9 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.v4.app.ActivityCompat;
 import android.support.v4.view.PagerAdapter;
+import android.support.v4.view.ViewCompat;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.ActionBar;
 import android.util.Log;
@@ -21,17 +23,16 @@ import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import com.ToxicBakery.viewpager.transforms.DepthPageTransformer;
 import com.nostra13.universalimageloader.core.DisplayImageOptions;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.assist.FailReason;
 import com.nostra13.universalimageloader.core.display.FadeInBitmapDisplayer;
 import com.nostra13.universalimageloader.core.listener.ImageLoadingListener;
-import com.viewpagerindicator.UnderlinePageIndicator;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import it.sephiroth.android.library.imagezoom.ImageViewTouch;
+import me.relex.circleindicator.CircleIndicator;
 
 public class ArticleImagesPagerActivity extends CommonActivity implements GestureDetector.OnDoubleTapListener {
     private final String TAG = this.getClass().getSimpleName();
@@ -52,6 +54,8 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
     private ArticleImagesPagerAdapter m_adapter;
     private String m_content;
     private GestureDetector m_detector;
+    private ProgressBar m_progress;
+    private ViewPager m_pager;
 
     @Override
     public boolean onSingleTapConfirmed(MotionEvent motionEvent) {
@@ -125,8 +129,11 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
                 }
             });
 
+            if (position == 0) {
+                ViewCompat.setTransitionName(imgView, "TRANSITION:ARTICLE_IMAGES_PAGER");
+            }
+
             registerForContextMenu(imgView);
-            getSupportActionBar().hide();
 
             DisplayImageOptions options = new DisplayImageOptions.Builder()
                     .cacheInMemory(true)
@@ -167,6 +174,10 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
 
             ((ViewPager) container).addView(view, 0);
 
+            if (position == 0) {
+                ActivityCompat.startPostponedEnterTransition(ArticleImagesPagerActivity.this);
+            }
+
             return view;
         }
 
@@ -194,12 +205,10 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
 
                     Bitmap bmp = ImageLoader.getInstance().loadImageSync(url, options);
 
-                    int progress = (int) ((position / (float)urls[0].size()) * 10000);
-
                     if (bmp != null && bmp.getWidth() > 128 && bmp.getHeight() > 128) {
-                        publishProgress(url, String.valueOf(progress));
+                        publishProgress(url, String.valueOf(position));
                     } else {
-                        publishProgress(null, String.valueOf(progress));
+                        publishProgress(null, String.valueOf(position));
                     }
                 }
             }
@@ -216,7 +225,9 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
                     m_adapter.notifyDataSetChanged();
                 }
 
-                setProgress(Integer.valueOf(checkedUrl[1]));
+                Log.d(TAG, "progr=" + checkedUrl[1]);
+
+                m_progress.setProgress(Integer.valueOf(checkedUrl[1]));
             } else {
                 cancel(true);
             }
@@ -224,22 +235,36 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
 
         @Override
         protected void onPostExecute(Integer result) {
-            //
+            m_progress.setVisibility(View.GONE);
+
+            CircleIndicator indicator = (CircleIndicator) findViewById(R.id.article_images_indicator);
+
+            if (indicator != null) {
+                indicator.setViewPager(m_pager);
+                indicator.setVisibility(View.VISIBLE);
+            }
+
         }
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        ActivityCompat.postponeEnterTransition(this);
+
         // we use that before parent onCreate so let's init locally
         m_prefs = PreferenceManager
                 .getDefaultSharedPreferences(getApplicationContext());
-        setAppTheme(m_prefs);
+
+        setDarkAppTheme(m_prefs);
 
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.article_images_pager);
 
+        m_progress = (ProgressBar) findViewById(R.id.article_images_progress);
+
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        getSupportActionBar().hide();
 
         if (savedInstanceState == null) {
             m_title = getIntent().getStringExtra("title");
@@ -276,6 +301,8 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
         }
 
         if (m_urls.size() > 1) {
+            m_progress.setProgress(0);
+            m_progress.setMax(m_urls.size());
             m_checkedUrls = new ArrayList<String>();
 
             ArrayList<String> tmp = new ArrayList<String>(m_urls);
@@ -287,29 +314,22 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
             ict.execute(tmp);
         } else {
             m_checkedUrls = new ArrayList<String>(m_urls);
+            m_progress.setVisibility(View.GONE);
         }
 
         setTitle(m_title);
 
         m_adapter = new ArticleImagesPagerAdapter(m_checkedUrls);
 
-        ViewPager pager = (ViewPager) findViewById(R.id.article_images_pager);
-        pager.setAdapter(m_adapter);
-
-        UnderlinePageIndicator indicator = (UnderlinePageIndicator)findViewById(R.id.article_images_indicator);
-        indicator.setViewPager(pager);
+        m_pager = (ViewPager) findViewById(R.id.article_images_pager);
+        m_pager.setAdapter(m_adapter);
+        m_pager.setPageTransformer(true, new DepthPageTransformer());
     }
 
     @SuppressLint("NewApi")
     @Override
     public void onResume() {
         super.onResume();
-
-        if (m_prefs.getBoolean("full_screen_mode", false)) {
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                    WindowManager.LayoutParams.FLAG_FULLSCREEN);
-            getSupportActionBar().hide();
-        }
     }
 
 
@@ -357,7 +377,7 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
 
         switch (item.getItemId()) {
             case android.R.id.home:
-                finish();
+                onBackPressed();
                 return true;
             case R.id.article_img_open:
                 if (url != null) {

@@ -8,21 +8,15 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
-import android.net.http.AndroidHttpClient;
-import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.support.v4.widget.SwipeRefreshLayout;
-import android.util.Base64;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.view.InflateException;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -46,12 +40,8 @@ import org.fox.ttrss.types.Feed;
 import org.fox.ttrss.types.FeedCategory;
 import org.fox.ttrss.types.FeedList;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -68,12 +58,13 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 	private Feed m_selectedFeed;
 	private FeedCategory m_activeCategory;
 	private static final String ICON_PATH = "/icons/";
-	private boolean m_enableFeedIcons;
+	//private boolean m_enableFeedIcons;
 	private boolean m_feedIconsChecked = false;
 	private SwipeRefreshLayout m_swipeLayout;
     private boolean m_enableParentBtn = false;
-	
-	public void initialize(FeedCategory cat, boolean enableParentBtn) {
+    private ListView m_list;
+
+    public void initialize(FeedCategory cat, boolean enableParentBtn) {
         m_activeCategory = cat;
         m_enableParentBtn = enableParentBtn;
 	}
@@ -240,8 +231,8 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
 
-        ListView list = (ListView) getView().findViewById(R.id.feeds);
-        Feed feed = (Feed) getFeedAtPosition(info.position);
+        //ListView list = (ListView) getView().findViewById(R.id.feeds);
+        Feed feed = (Feed) m_list.getItemAtPosition(info.position);
 		
 		menu.setHeaderTitle(feed.display_title != null ? feed.display_title : feed.title);
 
@@ -279,13 +270,6 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 			}
 		});
 
-	    if (!m_activity.isCompatMode()) {
-	    	m_swipeLayout.setColorScheme(android.R.color.holo_green_dark, 
-	    		android.R.color.holo_red_dark, 
-	            android.R.color.holo_blue_dark, 
-	            android.R.color.holo_orange_dark);
-	    }
-
         /* Button parentBtn = (Button) view.findViewById(R.id.open_parent);
 
         if (parentBtn != null) {
@@ -301,13 +285,15 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
             }
         } */
 
-		ListView list = (ListView)view.findViewById(R.id.feeds);
+		m_list = (ListView)view.findViewById(R.id.feeds);
+
+        if (m_activity.isSmallScreen()) {
+            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
+            m_list.addHeaderView(layout);
+        }
 
         if (m_enableParentBtn) {
-            View layout = inflater.inflate(R.layout.feeds_goback, container, false);
-
-            layout.setLayoutParams(new ListView.LayoutParams(ListView.LayoutParams.MATCH_PARENT,
-                    ListView.LayoutParams.WRAP_CONTENT));
+            View layout = inflater.inflate(R.layout.feeds_goback, m_list, false);
 
             layout.setOnClickListener(new OnClickListener() {
                 @Override
@@ -316,17 +302,40 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
                 }
             });
 
-            list.addHeaderView(layout, null, false);
+            m_list.addHeaderView(layout, null, false);
+        } else {
+            // TODO: better check
+            if (m_activity.findViewById(R.id.headlines_drawer) != null) {
+                try {
+                    View layout = inflater.inflate(R.layout.drawer_header, m_list, false);
+                    m_list.addHeaderView(layout, null, false);
+
+                    TextView login = (TextView) view.findViewById(R.id.drawer_header_login);
+                    TextView server = (TextView) view.findViewById(R.id.drawer_header_server);
+
+                    login.setText(m_prefs.getString("login", ""));
+                    try {
+                        server.setText(new URL(m_prefs.getString("ttrss_url", "")).getHost());
+                    } catch (MalformedURLException e) {
+                        server.setText("");
+                    }
+                } catch (InflateException e) {
+                    // welp couldn't inflate header i guess
+                    e.printStackTrace();
+                } catch (java.lang.UnsupportedOperationException e) {
+                    e.printStackTrace();
+                }
+            }
         }
 
         m_adapter = new FeedListAdapter(getActivity(), R.layout.feeds_row, (ArrayList<Feed>)m_feeds);
-		list.setAdapter(m_adapter);
+		m_list.setAdapter(m_adapter);
 		//list.setEmptyView(view.findViewById(R.id.no_feeds));
-		list.setOnItemClickListener(this);
+		m_list.setOnItemClickListener(this);
 
-		registerForContextMenu(list);
-		
-		m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
+		registerForContextMenu(m_list);
+
+        //m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
 
         View loadingBar = (View) view.findViewById(R.id.feeds_loading_bar);
         loadingBar.setVisibility(View.VISIBLE);
@@ -445,7 +454,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 	} */
 	
 	@SuppressWarnings({ "serial" })
-	public void getFeedIcons() {
+	/* public void getFeedIcons() {
 		
 		ApiRequest req = new ApiRequest(getActivity().getApplicationContext()) {
 			protected void onPostExecute(JsonElement result) {
@@ -494,7 +503,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		};
 
 		req.execute(map);
-	}
+	} */
 	
 	private class FeedsRequest extends ApiRequest {
 		private int m_catId;
@@ -577,8 +586,8 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 						//m_activity.setLoadingStatus(R.string.blank, false);
 						//m_adapter.notifyDataSetChanged(); (done by sortFeeds)
 						
-						if (m_enableFeedIcons && !m_feedIconsChecked &&	Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) 
-							getFeedIcons();
+						/* if (m_enableFeedIcons && !m_feedIconsChecked &&	Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()))
+							getFeedIcons(); */
 
 						return;
 					}
@@ -677,7 +686,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 
                 if ((feed.is_cat && feed.always_display_as_feed) || (!feed.is_cat && feed.id == -4)) {
                     icon.setImageResource(R.drawable.ic_published_special);
-                } else if (m_enableFeedIcons) {
+                /* } else if (m_enableFeedIcons) {
 					
 					try {
 						File storage = m_activity.getExternalCacheDir();
@@ -689,14 +698,31 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 								icon.setImageBitmap(bmpOrig);
 							}
 						} else {
-							icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
+                            if (m_activity.isDarkTheme()) {
+                                icon.setImageResource(R.drawable.ic_published);
+                            } else {
+                                icon.setImageResource(R.drawable.ic_menu_published_dark);
+                            }
+
+							//icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
 						}
 					} catch (NullPointerException e) {
-						icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-					}
+						//icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
+                        if (m_activity.isDarkTheme()) {
+                            icon.setImageResource(R.drawable.ic_published);
+                        } else {
+                            icon.setImageResource(R.drawable.ic_menu_published_dark);
+                        }
+					} */
 					
 				} else {
-					icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
+					//icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
+
+                    if (m_activity.isDarkTheme()) {
+                        icon.setImageResource(R.drawable.ic_published);
+                    } else {
+                        icon.setImageResource(R.drawable.ic_menu_published_dark);
+                    }
 				}
 				
 			}
@@ -743,7 +769,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		}
 	}
 	
-	public class GetIconsTask extends AsyncTask<FeedList, Integer, Integer> {
+	/* public class GetIconsTask extends AsyncTask<FeedList, Integer, Integer> {
 
 		private String m_baseUrl;
 		
@@ -786,11 +812,6 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		protected void downloadFile(String fetchUrl, String outputFile) {
 			AndroidHttpClient client = AndroidHttpClient.newInstance("Tiny Tiny RSS");
 			
-			/* ApiRequest.disableConnectionReuseIfNecessary(); */
-			
-			/* ApiRequest.trustAllHosts(m_prefs.getBoolean("ssl_trust_any", false),
-					m_prefs.getBoolean("ssl_trust_any_host", false)); */				
-
 			try {
 				URL url = new URL(fetchUrl);
 				HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -835,22 +856,20 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 			m_adapter.notifyDataSetChanged();
 		}
 		
-	}
+	} */
 
 	@Override
 	public void onSharedPreferenceChanged(SharedPreferences sharedPreferences,
 			String key) {
 
 		sortFeeds();
-		m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
+		//m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
 		
 	}
 
 	public Feed getFeedAtPosition(int position) {
 		try {
-            ListView list = (ListView) getView().findViewById(R.id.feeds);
-
-            return (Feed) list.getItemAtPosition(position);
+            return (Feed) m_list.getItemAtPosition(position);
         } catch (NullPointerException e) {
             return null;
 		} catch (IndexOutOfBoundsException e) {
@@ -858,7 +877,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		}
 	}
 	
-	public Feed getSelectedFeed() {
+	/* public Feed getSelectedFeed() {
 		return m_selectedFeed;
 	}	
 	
@@ -868,7 +887,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		if (m_adapter != null) {
 			m_adapter.notifyDataSetChanged();
 		}
-	}
+	} */
 
 	/* @Override
 	public void onRefreshStarted(View view) {
