@@ -29,6 +29,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebView.HitTestResult;
 import android.widget.FrameLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -52,6 +53,7 @@ public class ArticleFragment extends Fragment  {
 	private Article m_article;
 	private HeadlinesActivity m_activity;
     private WebView m_web;
+    private ProgressBar m_webview_progress;
     protected View m_customView;
     protected FrameLayout m_customViewContainer;
     protected View m_contentView;
@@ -120,6 +122,16 @@ public class ArticleFragment extends Fragment  {
 
             m_activity.showSidebar(true);
         }
+
+		public void onProgressChanged(WebView view, int progress) {
+			if(progress < 100 && m_webview_progress.getVisibility() == View.GONE){
+				m_webview_progress.setVisibility(View.VISIBLE);
+			}
+			m_webview_progress.setProgress(progress);
+			if(progress == 100) {
+				m_webview_progress.setVisibility(View.GONE);
+			}
+		}
     }
 
 	//private View.OnTouchListener m_gestureListener;
@@ -175,6 +187,9 @@ public class ArticleFragment extends Fragment  {
         NotifyingScrollView scrollView = (NotifyingScrollView) view.findViewById(R.id.article_scrollview);
         m_fab = view.findViewById(R.id.article_fab);
 
+        m_webview_progress = (ProgressBar) view.findViewById(R.id.webview_progress_bar);
+        m_webview_progress.setVisibility(View.GONE);
+
         if (scrollView != null && m_activity.isSmallScreen()) {
             view.findViewById(R.id.article_heading_spacer).setVisibility(View.VISIBLE);
 
@@ -200,16 +215,7 @@ public class ArticleFragment extends Fragment  {
                 m_fab.setOnClickListener(new OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        try {
-                            URL url = new URL(m_article.link.trim());
-                            String uri = new URI(url.getProtocol(), url.getUserInfo(), url.getHost(),
-                                    url.getPort(), url.getPath(), url.getQuery(), url.getRef()).toString();
-                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
-                            startActivity(intent);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                            m_activity.toast(R.string.error_other_error);
-                        }
+                        loadFullArticleInPlace();
                     }
                 });
             } else {
@@ -427,7 +433,7 @@ public class ArticleFragment extends Fragment  {
                         String articleContent = m_article.content != null ? m_article.content : "";
 
                         if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                            ws.setJavaScriptEnabled(true);
+                            //ws.setJavaScriptEnabled(true);
 
                             m_chromeClient = new FSVideoChromeClient(view);
                             m_web.setWebChromeClient(m_chromeClient);
@@ -578,9 +584,17 @@ public class ArticleFragment extends Fragment  {
     public boolean onContextItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.article_link_open_inplace:
-                m_web.loadUrl(m_article.link);
+                loadFullArticleInPlace();
                 return true;
         }
         return false;
+    }
+
+    private void loadFullArticleInPlace() {
+        String targetUrl = m_article.getFullArticleLink();
+        if (targetUrl == null) {
+            targetUrl = m_article.link.trim();
+        }
+        m_web.loadUrl(targetUrl);
     }
 }

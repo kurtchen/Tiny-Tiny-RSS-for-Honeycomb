@@ -114,6 +114,12 @@
                 android:paddingRight="16dp"
                 android:paddingBottom="8dp" />
 
+            <ProgressBar android:id="@+id/webview_progress_bar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true" />
+
             <org.fox.ttrss.util.LessBrokenWebView
                 android:layout_margin="16dp"
                 android:id="@+id/article_content"
