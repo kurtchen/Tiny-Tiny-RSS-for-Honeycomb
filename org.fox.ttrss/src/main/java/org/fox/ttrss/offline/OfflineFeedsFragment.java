@@ -5,13 +5,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Bundle;
-import android.os.Environment;
 import android.preference.PreferenceManager;
-import android.provider.BaseColumns;
-import android.support.v4.app.Fragment;
 import android.support.v4.widget.SimpleCursorAdapter;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.util.Log;
@@ -25,16 +20,13 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 import android.widget.AdapterView.OnItemClickListener;
-import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.fox.ttrss.BaseFeedlistFragment;
 import org.fox.ttrss.R;
 
-import java.io.File;
-
-public class OfflineFeedsFragment extends Fragment implements OnItemClickListener, OnSharedPreferenceChangeListener {
+public class OfflineFeedsFragment extends BaseFeedlistFragment implements OnItemClickListener, OnSharedPreferenceChangeListener {
 	private final String TAG = this.getClass().getSimpleName();
 	private SharedPreferences m_prefs;
 	private FeedListAdapter m_adapter;
@@ -43,7 +35,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 	private int m_catId = -1;
 	private boolean m_enableFeedIcons;
 	private Cursor m_cursor;
-	private OfflineFeedsActivity m_activity;
+	private OfflineMasterActivity m_activity;
     private SwipeRefreshLayout m_swipeLayout;
     private boolean m_enableParentBtn = false;
     private ListView m_list;
@@ -88,8 +80,10 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 	public void onCreateContextMenu(ContextMenu menu, View v,
 	    ContextMenuInfo menuInfo) {
 		
-		getActivity().getMenuInflater().inflate(R.menu.feed_menu, menu);
-		
+		getActivity().getMenuInflater().inflate(R.menu.context_feed, menu);
+
+		menu.findItem(R.id.create_shortcut).setEnabled(false);
+
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
 		Cursor cursor = (Cursor)getFeedAtPosition(info.position);
 		
@@ -105,14 +99,14 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 		String order = m_prefs.getBoolean("sort_feeds_by_unread", false) ? "unread DESC, title" : "title";
 		
 		if (m_catId != -1) {
-			return m_activity.getReadableDb().query("feeds_unread", 
+			return m_activity.getDatabase().query("feeds_unread", 
 					null, unreadOnly + " AND cat_id = ?",  new String[] { String.valueOf(m_catId) }, null, null, order);
 		} else {		
-			return m_activity.getReadableDb().query("feeds_unread", 
+			return m_activity.getDatabase().query("feeds_unread", 
 				null, unreadOnly, null, null, null, order);
 		}
 	}
-	
+
 	public void refresh() {
 		try {
 			if (!isAdded()) return;
@@ -132,7 +126,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 			e.printStackTrace();
 		}
 	}
-	
+
 	@Override
 	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {    	
 		
@@ -142,7 +136,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
             m_enableParentBtn = savedInstanceState.getBoolean("enableParentBtn");
 		}
 
-		View view = inflater.inflate(R.layout.feeds_fragment, container, false);
+		View view = inflater.inflate(R.layout.fragment_feeds, container, false);
 
         m_swipeLayout = (SwipeRefreshLayout) view.findViewById(R.id.feeds_swipe_container);
 
@@ -155,12 +149,9 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 
 		m_list = (ListView)view.findViewById(R.id.feeds);
 
-        if (m_activity.isSmallScreen()) {
-            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
-            m_list.addHeaderView(layout);
-        }
+		initDrawerHeader(inflater, view, m_list, m_activity, m_prefs, !m_enableParentBtn);
 
-        if (m_enableParentBtn) {
+		if (m_enableParentBtn) {
             View layout = inflater.inflate(R.layout.feeds_goback, container, false);
 
             layout.setLayoutParams(new ListView.LayoutParams(ListView.LayoutParams.MATCH_PARENT,
@@ -183,7 +174,6 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 
 		m_list.setAdapter(m_adapter);
 		m_list.setOnItemClickListener(this);
-		m_list.setEmptyView(view.findViewById(R.id.no_feeds));
 		registerForContextMenu(m_list);
 
 		m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
@@ -202,7 +192,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 	public void onAttach(Activity activity) {
 		super.onAttach(activity);
 		
-		m_activity = (OfflineFeedsActivity)activity;
+		m_activity = (OfflineMasterActivity)activity;
 		
 		m_prefs = PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext());
 		m_prefs.registerOnSharedPreferenceChangeListener(this);
@@ -236,6 +226,11 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 				m_adapter.notifyDataSetChanged();
 			}
 		}
+	}
+
+	@Override
+	public void refresh(boolean background) {
+		refresh();
 	}
 
 	/* public void setLoadingStatus(int status, boolean showProgress) {
@@ -316,36 +311,8 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 				tu.setText(String.valueOf(cursor.getInt(cursor.getColumnIndex("unread"))));
 				tu.setVisibility((cursor.getInt(cursor.getColumnIndex("unread")) > 0) ? View.VISIBLE : View.INVISIBLE);
 			}
-			
-			ImageView icon = (ImageView)v.findViewById(R.id.icon);
-			
-			if (icon != null) {
-				
-				if (m_enableFeedIcons) {
-					
-					try {
-						File storage = Environment.getExternalStorageDirectory();
-						
-						File iconFile = new File(storage.getAbsolutePath() + ICON_PATH + cursor.getInt(cursor.getColumnIndex(BaseColumns._ID)) + ".ico");
-						if (iconFile.exists()) {
-							Bitmap bmpOrig = BitmapFactory.decodeFile(iconFile.getAbsolutePath());		
-							if (bmpOrig != null) {
-								icon.setImageBitmap(bmpOrig);
-							}
-						} else {
-							icon.setImageResource(cursor.getInt(cursor.getColumnIndex("unread")) > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-						}
-					} catch (NullPointerException e) {
-						icon.setImageResource(cursor.getInt(cursor.getColumnIndex("unread")) > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-					}
-					
-				} else {
-					icon.setImageResource(cursor.getInt(cursor.getColumnIndex("unread")) > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-				}
-				
-			}
 
-			ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);
+			/*ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);
 			
 			if (ib != null) {
 				ib.setOnClickListener(new OnClickListener() {					
@@ -354,7 +321,7 @@ public class OfflineFeedsFragment extends Fragment implements OnItemClickListene
 						getActivity().openContextMenu(v);
 					}
 				});								
-			}
+			}*/
 
 			return v;
 		} 

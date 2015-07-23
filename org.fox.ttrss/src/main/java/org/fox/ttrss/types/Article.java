@@ -37,10 +37,10 @@ public class Article implements Parcelable {
 	public String note;
     public boolean selected;
 
-    /* not serialized */
-    public Document articleDoc;
-    public Element flavorImage;
-    public boolean noValidFlavorImage;
+	/* not serialized */
+	public Document articleDoc;
+	public Element flavorImage;
+	public int flavorImageCount;
 
 	public Article(Parcel in) {
 		readFromParcel(in);

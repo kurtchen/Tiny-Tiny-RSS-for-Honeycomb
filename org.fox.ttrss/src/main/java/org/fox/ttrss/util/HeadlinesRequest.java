@@ -1,13 +1,16 @@
 package org.fox.ttrss.util;
 
 import android.content.Context;
+import android.util.Log;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 import org.fox.ttrss.ApiRequest;
+import org.fox.ttrss.HeadlinesFragment;
 import org.fox.ttrss.OnlineActivity;
 import org.fox.ttrss.types.Article;
 import org.fox.ttrss.types.ArticleList;
@@ -24,9 +27,12 @@ public class HeadlinesRequest extends ApiRequest {
 	
 	private int m_offset = 0;
 	private OnlineActivity m_activity;
-	private ArticleList m_articles; // = new ArticleList(); //GlobalState.getInstance().m_loadedArticles;
+	private ArticleList m_articles; // = new ArticleList(); //Application.getInstance().m_loadedArticles;
 	private Feed m_feed;
-	
+
+	protected boolean m_firstIdChanged = false;
+	protected int m_firstId = 0;
+
 	public HeadlinesRequest(Context context, OnlineActivity activity, final Feed feed, ArticleList articles) {
 		super(context);
 
@@ -40,16 +46,39 @@ public class HeadlinesRequest extends ApiRequest {
 			try {
 				
 				// check if we are returning results for correct feed
-				/* if (GlobalState.getInstance().m_activeFeed != null && !m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
+				/* if (Application.getInstance().m_activeFeed != null && !m_feed.equals(Application.getInstance().m_activeFeed)) {
 					Log.d(TAG, "received results for wrong feed, bailing out.");
 					return;
 				} */
 				
 				JsonArray content = result.getAsJsonArray();
 				if (content != null) {
-					Type listType = new TypeToken<List<Article>>() {}.getType();
-					final List<Article> articles = new Gson().fromJson(content, listType);
-					
+					final List<Article> articles;
+					final JsonObject header;
+
+					if (m_activity.getApiLevel() >= 12) {
+						header = content.get(0).getAsJsonObject();
+
+						//Log.d(TAG, "headerID:" + header.get("top_id_changed"));
+
+						m_firstIdChanged = header.get("first_id_changed") != null;
+						try {
+							m_firstId = header.get("first_id").getAsInt();
+						} catch (NumberFormatException e) {
+							m_firstId = 0;
+						}
+
+						Log.d(TAG, "firstID=" + m_firstId + " firstIdChanged=" + m_firstIdChanged);
+
+						Type listType = new TypeToken<List<Article>>() {}.getType();
+						articles = new Gson().fromJson(content.get(1), listType);
+					} else {
+						header = null;
+
+						Type listType = new TypeToken<List<Article>>() {}.getType();
+						articles = new Gson().fromJson(content, listType);
+					}
+
 					if (m_offset == 0) {
 						m_articles.clear();
 					} else {
@@ -57,7 +86,7 @@ public class HeadlinesRequest extends ApiRequest {
 							m_articles.remove(0);
 						}
 
-						if (m_articles.get(m_articles.size()-1).id == -1) {
+						if (m_articles.get(m_articles.size()-1).id == HeadlinesFragment.ARTICLE_SPECIAL_LOADMORE) {
 							m_articles.remove(m_articles.size()-1); // remove previous placeholder
 						}
 						
@@ -68,7 +97,7 @@ public class HeadlinesRequest extends ApiRequest {
 							m_articles.add(f);
 
 					if (articles.size() == HEADLINES_REQUEST_SIZE) {
-						Article placeholder = new Article(-1);
+						Article placeholder = new Article(HeadlinesFragment.ARTICLE_SPECIAL_LOADMORE);
 						m_articles.add(placeholder);
 					}
 

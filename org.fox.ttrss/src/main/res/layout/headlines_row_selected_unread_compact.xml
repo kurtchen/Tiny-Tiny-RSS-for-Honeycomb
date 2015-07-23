@@ -108,12 +108,14 @@
 
         <ImageView
             android:id="@+id/marked"
+            android:background="@drawable/ripple"
+            android:tint="?headlineFooterColor"
             android:layout_width="24dp"
             android:layout_gravity="bottom|right"
             android:layout_height="24dp"
             android:layout_weight="0"
             android:clickable="true"
-            android:src="@drawable/ic_star_empty" />
+            android:src="?ic_star_outline" />
 
 
 

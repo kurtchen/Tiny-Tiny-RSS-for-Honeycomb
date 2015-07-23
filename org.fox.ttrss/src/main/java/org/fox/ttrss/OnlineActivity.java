@@ -14,11 +14,11 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.v7.view.ActionMode;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -32,10 +32,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
-import com.nostra13.universalimageloader.cache.disc.impl.UnlimitedDiscCache;
+import com.nostra13.universalimageloader.cache.disc.impl.ext.LruDiscCache;
+import com.nostra13.universalimageloader.core.DefaultConfigurationFactory;
 import com.nostra13.universalimageloader.core.ImageLoader;
 import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
-import com.nostra13.universalimageloader.utils.StorageUtils;
 
 import org.fox.ttrss.offline.OfflineActivity;
 import org.fox.ttrss.offline.OfflineDownloadService;
@@ -50,6 +50,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.select.Elements;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.List;
@@ -122,7 +123,7 @@ public class OnlineActivity extends CommonActivity {
 		public boolean onCreateActionMode(ActionMode mode, Menu menu) {
 
 			MenuInflater inflater = getMenuInflater();
-			inflater.inflate(R.menu.headlines_action_menu, menu);
+			inflater.inflate(R.menu.action_mode_headlines, menu);
 			
 			return true;
 		}
@@ -135,11 +136,11 @@ public class OnlineActivity extends CommonActivity {
 	}
 
     protected String getSessionId() {
-		return GlobalState.getInstance().m_sessionId;
+		return Application.getInstance().m_sessionId;
 	}
 
 	protected void setSessionId(String sessionId) {
-		GlobalState.getInstance().m_sessionId = sessionId;
+		Application.getInstance().m_sessionId = sessionId;
 	}
 	
 	@Override
@@ -162,15 +163,26 @@ public class OnlineActivity extends CommonActivity {
 
 		Log.d(TAG, "m_isOffline=" + isOffline);
 
-		setContentView(R.layout.login);
+		setContentView(R.layout.activity_login);
+
+		Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+		setSupportActionBar(toolbar);
 
         if (!ImageLoader.getInstance().isInited()) {
-            ImageLoaderConfiguration config = new ImageLoaderConfiguration.Builder(getApplicationContext())
-                    .diskCache(
-                            new UnlimitedDiscCache(new File(StorageUtils.getCacheDirectory(getApplicationContext()), "article-images")))
-                    .build();
+			ImageLoaderConfiguration config;
+
+			try {
+				config = new ImageLoaderConfiguration.Builder(getApplicationContext())
+						.diskCache(
+								new LruDiscCache(new File(getCacheDir(), "article-images"),
+										DefaultConfigurationFactory.createFileNameGenerator(),
+										100 * 1024 * 1024))
+						.build();
+			} catch (IOException e) {
+				config = new ImageLoaderConfiguration.Builder(getApplicationContext())
+						.build();
+			}
             ImageLoader.getInstance().init(config);
-            ImageLoader.getInstance().clearDiskCache();
         }
 
 		//m_pullToRefreshAttacher = PullToRefreshAttacher.get(this);
@@ -193,10 +205,10 @@ public class OnlineActivity extends CommonActivity {
 	}
 	
 	protected boolean canUseProgress() {
-		return GlobalState.getInstance().m_canUseProgress;
+		return Application.getInstance().m_canUseProgress;
 	}
 
-	private void switchOffline() {
+	protected void switchOffline() {
 		if (m_offlineModeStatus == 2) {
 			
 			AlertDialog.Builder builder = new AlertDialog.Builder(
@@ -212,7 +224,7 @@ public class OnlineActivity extends CommonActivity {
 									SharedPreferences localPrefs = getSharedPreferences("localprefs", Context.MODE_PRIVATE);
 									SharedPreferences.Editor editor = localPrefs.edit();
 									editor.putBoolean("offline_mode_active", true);
-									editor.commit();
+									editor.apply();
 									
 									Intent offline = new Intent(
 											OnlineActivity.this,
@@ -273,40 +285,6 @@ public class OnlineActivity extends CommonActivity {
 		}
 	}
 	
-	private boolean hasPendingOfflineData() {
-		try {
-			Cursor c = getReadableDb().query("articles",
-					new String[] { "COUNT(*)" }, "modified = 1", null, null, null,
-					null);
-			if (c.moveToFirst()) {
-				int modified = c.getInt(0);
-				c.close();
-	
-				return modified > 0;
-			}
-		} catch (IllegalStateException e) {
-			// db is closed? ugh
-		}
-
-		return false;
-	}
-
-	private boolean hasOfflineData() {
-		try {
-			Cursor c = getReadableDb().query("articles",
-					new String[] { "COUNT(*)" }, null, null, null, null, null);
-			if (c.moveToFirst()) {
-				int modified = c.getInt(0);
-				c.close();
-	
-				return modified > 0;
-			}
-		} catch (IllegalStateException e) {
-			// db is closed?
-		}
-
-		return false;
-	}
 
 	@Override
 	public void onPause() {
@@ -384,7 +362,7 @@ public class OnlineActivity extends CommonActivity {
 
 		SharedPreferences.Editor editor = m_prefs.edit();
 		editor.putBoolean("offline_mode_active", true);
-		editor.commit();
+		editor.apply();
 
 		Intent offline = new Intent(OnlineActivity.this, OfflineActivity.class);
 		offline.putExtra("initial", true);
@@ -453,13 +431,13 @@ public class OnlineActivity extends CommonActivity {
 		
 		initMenu();
 	
-		Intent intent = new Intent(OnlineActivity.this, FeedsActivity.class);
+		Intent intent = new Intent(OnlineActivity.this, MasterActivity.class);
 		intent.setFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
  	   
 		startActivityForResult(intent, 0);
 		overridePendingTransition(0, 0);
 
-		if (hasPendingOfflineData())
+		if (getDatabaseHelper().hasPendingOfflineData())
 			syncOfflineData();
 		
 		finish();
@@ -479,7 +457,7 @@ public class OnlineActivity extends CommonActivity {
 
                     SharedPreferences.Editor editor = m_prefs.edit();
                     editor.putLong("date_firstlaunch_trial", firstStart);
-                    editor.commit();
+					editor.apply();
                 }
 
                 if (!notify && System.currentTimeMillis() > firstStart + (TRIAL_DAYS * 24 * 60 * 60 * 1000)) {
@@ -639,22 +617,6 @@ public class OnlineActivity extends CommonActivity {
 		final ArticlePager ap = (ArticlePager)getSupportFragmentManager().findFragmentByTag(FRAG_ARTICLE);
 
 		switch (item.getItemId()) {
-		/* case android.R.id.home:
-			finish();
-			return true; */
-		/* case R.id.headlines_toggle_sidebar:
-			if (true && !isSmallScreen()) {
-				View v = findViewById(R.id.headlines_fragment); 
-				
-				if (v != null) {
-					SharedPreferences.Editor editor = m_prefs.edit();
-					editor.putBoolean("headlines_hide_sidebar", !m_prefs.getBoolean("headlines_hide_sidebar", false));
-					editor.commit();
-
-					v.setVisibility(m_prefs.getBoolean("headlines_hide_sidebar", false) ? View.GONE : View.VISIBLE);
-				}
-			}
-			return true; */
 		case R.id.subscribe_to_feed:
 			Intent subscribe = new Intent(OnlineActivity.this, SubscribeActivity.class);
 			startActivityForResult(subscribe, 0);
@@ -719,15 +681,15 @@ public class OnlineActivity extends CommonActivity {
 				openUnlockUrl();
 			}
 			return true;
-		case R.id.logout:
+		/*case R.id.logout:
 			logout();
-			return true;
+			return true;*/
 		case R.id.login:
 			login();
 			return true;
-		case R.id.go_offline:
+		/*case R.id.go_offline:
 			switchOffline();
-			return true;
+			return true;*/
 		case R.id.article_set_note:
 			if (ap != null && ap.getSelectedArticle() != null) {
 				editArticleNote(ap.getSelectedArticle());				
@@ -912,11 +874,11 @@ public class OnlineActivity extends CommonActivity {
 				dialog.show();
 			}
 			return true;
-		case R.id.share_article:
+		/* case R.id.share_article:
 			if (ap != null) {
 				shareArticle(ap.getSelectedArticle());
 			}
-			return true;
+			return true; */
 		case R.id.toggle_marked:
 			if (ap != null & ap.getSelectedArticle() != null) {
 				Article a = ap.getSelectedArticle();
@@ -925,6 +887,14 @@ public class OnlineActivity extends CommonActivity {
 				if (hf != null) hf.notifyUpdated();
 			}
 			return true;
+			case R.id.toggle_unread:
+				if (ap != null & ap.getSelectedArticle() != null) {
+					Article a = ap.getSelectedArticle();
+					a.unread = !a.unread;
+					saveArticleUnread(a);
+					if (hf != null) hf.notifyUpdated();
+				}
+				return true;
 		/* case R.id.selection_select_none:
 			if (hf != null) {
 				ArticleList selected = hf.getSelectedArticles();
@@ -1019,12 +989,12 @@ public class OnlineActivity extends CommonActivity {
 								
 			}
 			return true;
-		case R.id.update_headlines:
+		/*case R.id.update_headlines:
 			if (hf != null) {
 				//m_pullToRefreshAttacher.setRefreshing(true);
 				hf.refresh(false, true);
 			}
-			return true;
+			return true;*/
 		default:
 			Log.d(TAG, "onOptionsItemSelected, unhandled id=" + item.getItemId());
 			return super.onOptionsItemSelected(item);
@@ -1201,7 +1171,7 @@ public class OnlineActivity extends CommonActivity {
 		setSessionId(null);
 		initMenu();
 		
-		if (hasOfflineData()) {
+		if (getDatabaseHelper().hasOfflineData()) {
 
 			AlertDialog.Builder builder = new AlertDialog.Builder(
 					OnlineActivity.this)
@@ -1261,7 +1231,7 @@ public class OnlineActivity extends CommonActivity {
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		MenuInflater inflater = getMenuInflater();
-		inflater.inflate(R.menu.main_menu, menu);
+		inflater.inflate(R.menu.activity_main, menu);
 
 		m_menu = menu;
 
@@ -1281,12 +1251,12 @@ public class OnlineActivity extends CommonActivity {
 		return true;
 	}
 	
-	protected int getApiLevel() {
-		return GlobalState.getInstance().m_apiLevel;
+	public int getApiLevel() {
+		return Application.getInstance().m_apiLevel;
 	}
 	
 	protected void setApiLevel(int apiLevel) {
-		GlobalState.getInstance().m_apiLevel = apiLevel;
+		Application.getInstance().m_apiLevel = apiLevel;
 	}
 	
 	@SuppressWarnings({ "unchecked", "serial" })
@@ -1554,11 +1524,14 @@ public class OnlineActivity extends CommonActivity {
 				Article article = ap.getSelectedArticle();
 				
 				if (article != null) {
-					m_menu.findItem(R.id.toggle_marked).setIcon(article.marked ? R.drawable.ic_important_light :
-						R.drawable.ic_unimportant_light);
+					m_menu.findItem(R.id.toggle_marked).setIcon(article.marked ? R.drawable.ic_star :
+						R.drawable.ic_star_outline);
 
-					m_menu.findItem(R.id.toggle_published).setIcon(article.published ? R.drawable.ic_menu_published_light :
-						R.drawable.ic_menu_unpublished_light);
+					m_menu.findItem(R.id.toggle_published).setIcon(article.published ? R.drawable.ic_checkbox_marked :
+						R.drawable.ic_rss_box);
+
+					m_menu.findItem(R.id.toggle_unread).setIcon(article.unread ? R.drawable.ic_email :
+							R.drawable.ic_email_open);
 				}
 			}
 			
@@ -1629,7 +1602,7 @@ public class OnlineActivity extends CommonActivity {
 						
 						JsonElement apiLevel = content.get("api_level");
 
-						GlobalState.getInstance().m_canUseProgress = m_canUseProgress;
+						Application.getInstance().m_canUseProgress = m_canUseProgress;
 
 						Log.d(TAG, "Authenticated! canUseProgress=" + m_canUseProgress);
 						
@@ -1713,13 +1686,13 @@ public class OnlineActivity extends CommonActivity {
     public void setSortMode(String sortMode) {
         SharedPreferences.Editor editor = m_prefs.edit();
         editor.putString("headlines_sort_mode", sortMode);
-        editor.commit();
+		editor.apply();
     }
 
     public void setViewMode(String viewMode) {
 		SharedPreferences.Editor editor = m_prefs.edit();
 		editor.putString("view_mode", viewMode);
-		editor.commit();
+		editor.apply();
 	}
 
 	public String getViewMode() {

@@ -14,6 +14,7 @@ import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewCompat;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.ActionBar;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.GestureDetector;
@@ -255,11 +256,14 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
         m_prefs = PreferenceManager
                 .getDefaultSharedPreferences(getApplicationContext());
 
-        setDarkAppTheme(m_prefs);
+        setTheme(R.style.DarkTheme);
 
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.article_images_pager);
+
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
 
         m_progress = (ProgressBar) findViewById(R.id.article_images_progress);
 
@@ -337,7 +341,7 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
     public void onCreateContextMenu(ContextMenu menu, View v,
                                     ContextMenu.ContextMenuInfo menuInfo) {
 
-        getMenuInflater().inflate(R.menu.article_content_img_context_menu, menu);
+        getMenuInflater().inflate(R.menu.context_article_content_img, menu);
 
         super.onCreateContextMenu(menu, v, menuInfo);
     }
@@ -354,7 +358,7 @@ public class ArticleImagesPagerActivity extends CommonActivity implements Gestur
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.article_content_img_context_menu, menu);
+        getMenuInflater().inflate(R.menu.context_article_content_img, menu);
 
 
         return true;

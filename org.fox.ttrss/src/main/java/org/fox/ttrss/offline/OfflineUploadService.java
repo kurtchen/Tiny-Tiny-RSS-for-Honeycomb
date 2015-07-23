@@ -29,13 +29,12 @@ public class OfflineUploadService extends IntentService {
 	public static final int NOTIFY_UPLOADING = 2;
 	public static final String INTENT_ACTION_SUCCESS = "org.fox.ttrss.intent.action.UploadComplete";
 	
-	private SQLiteDatabase m_writableDb;
-	private SQLiteDatabase m_readableDb;
 	private String m_sessionId;
 	private NotificationManager m_nmgr;
 	private boolean m_uploadInProgress = false;
 	private boolean m_batchMode = false;
-	
+	private DatabaseHelper m_databaseHelper;
+
 	public OfflineUploadService() {
 		super("OfflineUploadService");
 	}
@@ -55,7 +54,7 @@ public class OfflineUploadService extends IntentService {
 	}
 
 	@SuppressWarnings("deprecation")
-	private void updateNotification(String msg) {
+	private void updateNotification(String msg, int progress, int max, boolean showProgress) {
 		PendingIntent contentIntent = PendingIntent.getActivity(this, 0,
                 new Intent(this, OnlineActivity.class), 0);
 
@@ -64,12 +63,15 @@ public class OfflineUploadService extends IntentService {
                 .setContentTitle(getString(R.string.notify_uploading_title))
                 .setContentIntent(contentIntent)
                 .setWhen(System.currentTimeMillis())
-                .setSmallIcon(R.drawable.ic_notification)
+				.setProgress(0, 0, true)
+                .setSmallIcon(R.drawable.ic_cloud_upload)
                 .setLargeIcon(BitmapFactory.decodeResource(getApplicationContext().getResources(),
                         R.drawable.ic_launcher))
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setVibrate(new long[0]);
+
+		if (showProgress) builder.setProgress(max, progress, max == 0);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             builder.setCategory(Notification.CATEGORY_PROGRESS)
@@ -81,22 +83,16 @@ public class OfflineUploadService extends IntentService {
         m_nmgr.notify(NOTIFY_UPLOADING, builder.build());
 	}
 	
-	private void updateNotification(int msgResId) {
-		updateNotification(getString(msgResId));
+	private void updateNotification(int msgResId, int progress, int max, boolean showProgress) {
+		updateNotification(getString(msgResId), progress, max, showProgress);
 	}
 
 	private void initDatabase() {
-		DatabaseHelper dh = new DatabaseHelper(getApplicationContext());
-		m_writableDb = dh.getWritableDatabase();
-		m_readableDb = dh.getReadableDatabase();
+		m_databaseHelper = DatabaseHelper.getInstance(this);
 	}
-	
-	private synchronized SQLiteDatabase getReadableDb() {
-		return m_readableDb;
-	}
-	
-	private synchronized SQLiteDatabase getWritableDb() {
-		return m_writableDb;
+
+	private synchronized SQLiteDatabase getDatabase() {
+		return m_databaseHelper.getWritableDatabase();
 	}
 	
 	private void uploadRead() {
@@ -111,7 +107,7 @@ public class OfflineUploadService extends IntentService {
 					if (result != null) {
 						uploadMarked();
 					} else {
-						updateNotification(getErrorMessage());
+						updateNotification(getErrorMessage(), 0, 0, false);
 						uploadFailed();
 					}
 				}
@@ -154,7 +150,7 @@ public class OfflineUploadService extends IntentService {
 			break;
 		}
 
-		Cursor c = getReadableDb().query("articles", null,
+		Cursor c = getDatabase().query("articles", null,
 				"modified = 1 AND " + criteriaStr, null, null, null, null);
 
 		String tmp = "";
@@ -182,7 +178,7 @@ public class OfflineUploadService extends IntentService {
 					if (result != null) {
 						uploadPublished();
 					} else {
-						updateNotification(getErrorMessage());
+						updateNotification(getErrorMessage(), 0, 0, false);
 						uploadFailed();
 					}
 				}
@@ -206,23 +202,20 @@ public class OfflineUploadService extends IntentService {
 	}
 	
 	private void uploadFailed() {
-        m_readableDb.close();
-        m_writableDb.close();
-
         // TODO send notification to activity?
         
         m_uploadInProgress = false;
 	}
 
 	private void uploadSuccess() {
-		getWritableDb().execSQL("UPDATE articles SET modified = 0");
+		getDatabase().execSQL("UPDATE articles SET modified = 0");
 
 		if (m_batchMode) {
 			
 			SharedPreferences localPrefs = getSharedPreferences("localprefs", Context.MODE_PRIVATE);
 			SharedPreferences.Editor editor = localPrefs.edit();
 			editor.putBoolean("offline_mode_active", false);
-			editor.commit();
+			editor.apply();
 			
 		} else {
 	        Intent intent = new Intent();
@@ -230,10 +223,7 @@ public class OfflineUploadService extends IntentService {
 	        intent.addCategory(Intent.CATEGORY_DEFAULT);
 	        sendBroadcast(intent);
 		}
-        
-        m_readableDb.close();
-        m_writableDb.close();
-		
+
         m_uploadInProgress = false;
         
 		m_nmgr.cancel(NOTIFY_UPLOADING);
@@ -251,7 +241,7 @@ public class OfflineUploadService extends IntentService {
 					if (result != null) {
 						uploadSuccess();
 					} else {
-						updateNotification(getErrorMessage());
+						updateNotification(getErrorMessage(), 0, 0, false);
 						uploadFailed();
 					}
 				}
@@ -278,7 +268,7 @@ public class OfflineUploadService extends IntentService {
 	@Override
 	protected void onHandleIntent(Intent intent) {
 		try {
-			if (getWritableDb().isDbLockedByCurrentThread() || getWritableDb().isDbLockedByOtherThreads()) {
+			if (getDatabase().isDbLockedByCurrentThread() || getDatabase().isDbLockedByOtherThreads()) {
 				return;
 			}
 	
@@ -288,7 +278,7 @@ public class OfflineUploadService extends IntentService {
 			if (!m_uploadInProgress) {
 				m_uploadInProgress = true;
 	
-				updateNotification(R.string.notify_uploading_sending_data);
+				updateNotification(R.string.notify_uploading_sending_data, 0, 0, true);
 				
 				uploadRead();			
 			}

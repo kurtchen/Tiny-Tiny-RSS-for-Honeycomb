@@ -31,12 +31,13 @@ public class ArticlePager extends Fragment {
 	private PagerAdapter m_adapter;
 	private HeadlinesEventListener m_listener;
 	private Article m_article;
-	private ArticleList m_articles = new ArticleList(); //m_articles = GlobalState.getInstance().m_loadedArticles;
+	private ArticleList m_articles = new ArticleList(); //m_articles = Application.getInstance().m_loadedArticles;
 	private OnlineActivity m_activity;
 	private String m_searchQuery = "";
 	private Feed m_feed;
 	private SharedPreferences m_prefs;
-	
+	private int m_firstId = 0;
+
 	private class PagerAdapter extends ClassloaderWorkaroundFragmentStatePagerAdapter {
 		
 		public PagerAdapter(FragmentManager fm) {
@@ -79,8 +80,9 @@ public class ArticlePager extends Fragment {
 	
 		if (savedInstanceState != null) {
 			m_article = savedInstanceState.getParcelable("article");
-            m_articles = ((HeadlinesActivity)m_activity).m_articles;
+            m_articles = ((DetailActivity)m_activity).m_articles;
 			m_feed = savedInstanceState.getParcelable("feed");
+			m_firstId = savedInstanceState.getInt("firstId");
 		}
 		
 		m_adapter = new PagerAdapter(getActivity().getSupportFragmentManager());
@@ -138,7 +140,7 @@ public class ArticlePager extends Fragment {
 	@SuppressWarnings({ "serial" }) 
 	protected void refresh(boolean append) {
 
-		/* if (!m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
+		/* if (!m_feed.equals(Application.getInstance().m_activeFeed)) {
 			append = false;
 		} */
 		
@@ -155,6 +157,13 @@ public class ArticlePager extends Fragment {
 				super.onPostExecute(result);
 				
 				if (result != null) {
+
+					if (m_firstIdChanged) {
+						m_articles.add(new Article(HeadlinesFragment.ARTICLE_SPECIAL_TOP_CHANGED));
+					}
+
+					ArticlePager.this.m_firstId = m_firstId;
+
 					try {
 						m_adapter.notifyDataSetChanged();
 					} catch (BadParcelableException e) {
@@ -172,7 +181,7 @@ public class ArticlePager extends Fragment {
 							}
 						}
 					}
-					
+
 				} else {
 					if (m_lastError == ApiError.LOGIN_FAILED) {
 						m_activity.login(true);
@@ -217,7 +226,7 @@ public class ArticlePager extends Fragment {
 		final int fskip = skip;
 		
 		req.setOffset(skip);
-		
+
 		HashMap<String,String> map = new HashMap<String,String>() {
 			{
 				put("op", "getHeadlines");
@@ -242,10 +251,17 @@ public class ArticlePager extends Fragment {
 					put("search_mode", "");
 					put("match_on", "both");
 				}
+
+				if (m_firstId > 0) put("check_first_id", String.valueOf(m_firstId));
+
+				if (m_activity.getApiLevel() >= 12) {
+					put("include_header", "true");
+				}
+
 			}			 
 		};
 
-        Log.d(TAG, "[AP] request more headlines...");
+        Log.d(TAG, "[AP] request more headlines, firstId=" + m_firstId);
 
 		req.execute(map);
 	}
@@ -253,10 +269,11 @@ public class ArticlePager extends Fragment {
 	@Override
 	public void onSaveInstanceState(Bundle out) {
 		super.onSaveInstanceState(out);
-		
+
 		out.setClassLoader(getClass().getClassLoader());
 		out.putParcelable("article", m_article);
 		out.putParcelable("feed", m_feed);
+		out.putInt("firstId", m_firstId);
 	}
 	
 	@Override
@@ -274,11 +291,13 @@ public class ArticlePager extends Fragment {
 	public void onResume() {
 		super.onResume();
 		
-		/* if (m_articles.size() == 0 || !m_feed.equals(GlobalState.getInstance().m_activeFeed)) {
+		/* if (m_articles.size() == 0 || !m_feed.equals(Application.getInstance().m_activeFeed)) {
 			refresh(false);
-			GlobalState.getInstance().m_activeFeed = m_feed;
+			Application.getInstance().m_activeFeed = m_feed;
 		} */
-		
+
+		if (m_adapter != null) m_adapter.notifyDataSetChanged();
+
 		m_activity.invalidateOptionsMenu();
 	}
 

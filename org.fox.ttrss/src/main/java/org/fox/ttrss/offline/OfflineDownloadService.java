@@ -52,8 +52,6 @@ public class OfflineDownloadService extends Service {
 	private static final int OFFLINE_SYNC_SEQ = 50;
 	private static final int OFFLINE_SYNC_MAX = OFFLINE_SYNC_SEQ * 10;
 	
-	private SQLiteDatabase m_writableDb;
-	private SQLiteDatabase m_readableDb;
 	private int m_articleOffset = 0;
 	private String m_sessionId;
 	private NotificationManager m_nmgr;
@@ -66,8 +64,9 @@ public class OfflineDownloadService extends Service {
 	private boolean m_canProceed = true;
 	
 	private final IBinder m_binder = new LocalBinder();
-	
-    public class LocalBinder extends Binder {
+	private DatabaseHelper m_databaseHelper;
+
+	public class LocalBinder extends Binder {
         OfflineDownloadService getService() {
             return OfflineDownloadService.this;
         }
@@ -92,7 +91,7 @@ public class OfflineDownloadService extends Service {
 	}
 	
 	@SuppressWarnings("deprecation")
-	private void updateNotification(String msg) {
+	private void updateNotification(String msg, int progress, int max, boolean showProgress) {
 		Intent intent = new Intent(this, OnlineActivity.class);
 		intent.setAction(INTENT_ACTION_CANCEL);
 		
@@ -104,11 +103,13 @@ public class OfflineDownloadService extends Service {
                 .setContentTitle(getString(R.string.notify_downloading_title))
                 .setContentIntent(contentIntent)
                 .setWhen(System.currentTimeMillis())
-                .setSmallIcon(R.drawable.ic_notification)
+				.setSmallIcon(R.drawable.ic_cloud_download)
                 .setLargeIcon(BitmapFactory.decodeResource(getApplicationContext().getResources(),
                         R.drawable.ic_launcher))
                 .setOngoing(true)
                 .setOnlyAlertOnce(true);
+
+		if (showProgress) builder.setProgress(max, progress, max == 0);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             builder.setCategory(Notification.CATEGORY_PROGRESS)
@@ -121,14 +122,11 @@ public class OfflineDownloadService extends Service {
         m_nmgr.notify(NOTIFY_DOWNLOADING, builder.build());
 	}
 
-	private void updateNotification(int msgResId) {
-		updateNotification(getString(msgResId));
+	private void updateNotification(int msgResId, int progress, int max, boolean showProgress) {
+		updateNotification(getString(msgResId), progress, max, showProgress);
 	}
 
 	private void downloadFailed() {
-        m_readableDb.close();
-        m_writableDb.close();
-
         m_nmgr.cancel(NOTIFY_DOWNLOADING);
         
         // TODO send notification to activity?
@@ -159,7 +157,7 @@ public class OfflineDownloadService extends Service {
             	SharedPreferences localPrefs = getSharedPreferences("localprefs", Context.MODE_PRIVATE);
 				SharedPreferences.Editor editor = localPrefs.edit();
 				editor.putBoolean("offline_mode_active", true);
-				editor.commit();
+				editor.apply();
             	
             } else {
             	Intent intent = new Intent();
@@ -168,34 +166,29 @@ public class OfflineDownloadService extends Service {
             	sendBroadcast(intent);
             }
         } else {
-        	updateNotification(getString(R.string.notify_downloading_images, 0));
+        	updateNotification(getString(R.string.notify_downloading_images, 0), 0, 0, true);
         }
-        
-        m_readableDb.close();
-        m_writableDb.close();
-        
+
         stopSelf();
 	}
 	
 	private void initDatabase() {
-		DatabaseHelper dh = new DatabaseHelper(getApplicationContext());
-		m_writableDb = dh.getWritableDatabase();
-		m_readableDb = dh.getReadableDatabase();
+		m_databaseHelper = DatabaseHelper.getInstance(this);
 	}
 	
 	/* private synchronized SQLiteDatabase getReadableDb() {
 		return m_readableDb;
 	} */
 	
-	private synchronized SQLiteDatabase getWritableDb() {
-		return m_writableDb;
+	private synchronized SQLiteDatabase getDatabase() {
+		return m_databaseHelper.getWritableDatabase();
 	}
 	
 	@SuppressWarnings("unchecked")
 	private void downloadArticles() {
 		Log.d(TAG, "offline: downloading articles... offset=" + m_articleOffset);
 		
-		updateNotification(getString(R.string.notify_downloading_articles, m_articleOffset));
+		updateNotification(getString(R.string.notify_downloading_articles, m_articleOffset), m_articleOffset, m_syncMax, true);
 		
 		OfflineArticlesRequest req = new OfflineArticlesRequest(this);
 		
@@ -217,9 +210,9 @@ public class OfflineDownloadService extends Service {
 	
 	private void downloadFeeds() {
 
-		updateNotification(R.string.notify_downloading_feeds);
+		updateNotification(R.string.notify_downloading_feeds, 0, 0, true);
 		
-		getWritableDb().execSQL("DELETE FROM feeds;");
+		getDatabase().execSQL("DELETE FROM feeds;");
 		
 		ApiRequest req = new ApiRequest(getApplicationContext()) {
 			@Override
@@ -232,9 +225,9 @@ public class OfflineDownloadService extends Service {
 						Type listType = new TypeToken<List<Feed>>() {}.getType();
 						List<Feed> feeds = new Gson().fromJson(content, listType);
 						
-						SQLiteStatement stmtInsert = getWritableDb().compileStatement("INSERT INTO feeds " +
-								"("+BaseColumns._ID+", title, feed_url, has_icon, cat_id) " +
-						"VALUES (?, ?, ?, ?, ?);");
+						SQLiteStatement stmtInsert = getDatabase().compileStatement("INSERT INTO feeds " +
+								"(" + BaseColumns._ID + ", title, feed_url, has_icon, cat_id) " +
+								"VALUES (?, ?, ?, ?, ?);");
 						
 						for (Feed feed : feeds) {
 							stmtInsert.bindLong(1, feed.id);
@@ -252,10 +245,10 @@ public class OfflineDownloadService extends Service {
 						
 						m_articleOffset = 0;
 						
-						getWritableDb().execSQL("DELETE FROM articles;");
+						getDatabase().execSQL("DELETE FROM articles;");
 					} catch (Exception e) {
 						e.printStackTrace();
-						updateNotification(R.string.offline_switch_error);
+						updateNotification(R.string.offline_switch_error, 0, 0, false);
 						downloadFailed();
 					}
 				}
@@ -272,7 +265,7 @@ public class OfflineDownloadService extends Service {
 						downloadFailed();
 					}
 				} else {
-					updateNotification(getErrorMessage());
+					updateNotification(getErrorMessage(), 0, 0, false);
 					downloadFailed();
 				}
 			}
@@ -294,9 +287,9 @@ public class OfflineDownloadService extends Service {
 
 	private void downloadCategories() {
 
-		updateNotification(R.string.notify_downloading_feeds);
+		updateNotification(R.string.notify_downloading_categories, 0, 0, true);
 		
-		getWritableDb().execSQL("DELETE FROM categories;");
+		getDatabase().execSQL("DELETE FROM categories;");
 		
 		ApiRequest req = new ApiRequest(getApplicationContext()) {
 			protected JsonElement doInBackground(HashMap<String, String>... params) {
@@ -307,9 +300,9 @@ public class OfflineDownloadService extends Service {
 						Type listType = new TypeToken<List<FeedCategory>>() {}.getType();
 						List<FeedCategory> cats = new Gson().fromJson(content, listType);
 						
-						SQLiteStatement stmtInsert = getWritableDb().compileStatement("INSERT INTO categories " +
-								"("+BaseColumns._ID+", title) " +
-						"VALUES (?, ?);");
+						SQLiteStatement stmtInsert = getDatabase().compileStatement("INSERT INTO categories " +
+								"(" + BaseColumns._ID + ", title) " +
+								"VALUES (?, ?);");
 						
 						for (FeedCategory cat : cats) {
 							stmtInsert.bindLong(1, cat.id);
@@ -324,7 +317,7 @@ public class OfflineDownloadService extends Service {
 						
 					} catch (Exception e) {
 						e.printStackTrace();
-						updateNotification(R.string.offline_switch_error);
+						updateNotification(R.string.offline_switch_error, 0, 0, false);
 						downloadFailed();
 					}
 				}
@@ -340,7 +333,7 @@ public class OfflineDownloadService extends Service {
 						downloadFailed();
 					}
 				} else {
-					updateNotification(getErrorMessage());
+					updateNotification(getErrorMessage(), 0, 0, false);
 					downloadFailed();
 				}
 			}
@@ -368,9 +361,7 @@ public class OfflineDownloadService extends Service {
 
 		m_canProceed = false;
 		Log.d(TAG, "onDestroy");
-		
-		//m_readableDb.close();
-		//m_writableDb.close();
+
 	}
 
 	public class OfflineArticlesRequest extends ApiRequest {
@@ -390,9 +381,9 @@ public class OfflineDownloadService extends Service {
 					Type listType = new TypeToken<List<Article>>() {}.getType();
 					m_articles = new Gson().fromJson(content, listType);
 	
-					SQLiteStatement stmtInsert = getWritableDb().compileStatement("INSERT INTO articles " +
-							"("+BaseColumns._ID+", unread, marked, published, score, updated, is_updated, title, link, feed_id, tags, content, author) " +
-					"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+					SQLiteStatement stmtInsert = getDatabase().compileStatement("INSERT INTO articles " +
+							"(" + BaseColumns._ID + ", unread, marked, published, score, updated, is_updated, title, link, feed_id, tags, content, author) " +
+							"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
 	
 					for (Article article : m_articles) {
 	
@@ -456,7 +447,7 @@ public class OfflineDownloadService extends Service {
 					stmtInsert.close();
 
 				} catch (Exception e) {
-					updateNotification(R.string.offline_switch_error);
+					updateNotification(R.string.offline_switch_error, 0, 0, false);
 					Log.d(TAG, "offline: failed: exception when loading articles");
 					e.printStackTrace();
 					downloadFailed();
@@ -483,7 +474,7 @@ public class OfflineDownloadService extends Service {
 
 			} else {
 				Log.d(TAG, "offline: failed: " + getErrorMessage());
-				updateNotification(getErrorMessage());
+				updateNotification(getErrorMessage(), 0, 0, false);
 				downloadFailed();
 			}
 		}
@@ -492,7 +483,7 @@ public class OfflineDownloadService extends Service {
 	@Override
 	public void onStart(Intent intent, int startId) {
 		try {
-			if (getWritableDb().isDbLockedByCurrentThread() || getWritableDb().isDbLockedByOtherThreads()) {
+			if (getDatabase().isDbLockedByCurrentThread() || getDatabase().isDbLockedByOtherThreads()) {
 				return;
 			}
 			
@@ -502,7 +493,7 @@ public class OfflineDownloadService extends Service {
 			if (!m_downloadInProgress) {
 				if (m_downloadImages) ImageCacheService.cleanupCache(this, false);
 			
-				updateNotification(R.string.notify_downloading_init);
+				updateNotification(R.string.notify_downloading_init, 0, 0, true);
 				m_downloadInProgress = true;
 		
 				downloadCategories();

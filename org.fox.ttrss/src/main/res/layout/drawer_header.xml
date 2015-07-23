@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="96dp"
+    android:layout_height="120dp"
     android:orientation="vertical"
     android:weightSum="1"
     android:clickable="false">
@@ -11,10 +11,30 @@
         android:layout_width="fill_parent"
         android:layout_height="fill_parent"
         android:id="@+id/imageView"
-        android:src="@drawable/drawer_header"
         android:scaleType="fitXY"
-        android:tint="?colorPrimaryDark"
-        android:tintMode="multiply" />
+        android:background="?colorPrimaryDark"
+        android:src="?drawer_header" />
+
+    <FrameLayout
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/circle_bg"
+        android:clickable="true"
+        android:layout_centerVertical="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true"
+        android:layout_marginRight="16dp"
+        android:elevation="8dp">
+
+        <ImageView
+            android:id="@+id/drawer_header_account"
+            android:background="@drawable/ripple"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:tint="?colorAccent"
+            android:src="@drawable/ic_account"
+            android:layout_gravity="center" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -22,7 +42,8 @@
         android:orientation="vertical"
         android:layout_alignParentBottom="true"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true">
+        android:layout_alignParentStart="true"
+        android:id="@+id/linearLayout">
 
         <TextView
             android:id="@+id/drawer_header_login"
@@ -50,5 +71,13 @@
             />
     </LinearLayout>
 
-
+    <ProgressBar
+        style="?android:attr/progressBarStyleHorizontal"
+        android:visibility="invisible"
+        android:indeterminate="true"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/feeds_loading_bar"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentBottom="true" />
 </RelativeLayout>

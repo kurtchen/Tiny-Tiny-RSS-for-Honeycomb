@@ -11,12 +11,11 @@ import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.support.v4.app.Fragment;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.view.InflateException;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
@@ -26,7 +25,6 @@ import android.widget.AdapterView;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -41,20 +39,18 @@ import org.fox.ttrss.types.FeedCategory;
 import org.fox.ttrss.types.FeedList;
 
 import java.lang.reflect.Type;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 
-public class FeedsFragment extends Fragment implements OnItemClickListener, OnSharedPreferenceChangeListener {
+public class FeedsFragment extends BaseFeedlistFragment implements OnItemClickListener, OnSharedPreferenceChangeListener {
 	private final String TAG = this.getClass().getSimpleName();
 	private SharedPreferences m_prefs;
 	private FeedListAdapter m_adapter;
 	private FeedList m_feeds = new FeedList();
-	private FeedsActivity m_activity;
+	private MasterActivity m_activity;
 	private Feed m_selectedFeed;
 	private FeedCategory m_activeCategory;
 	private static final String ICON_PATH = "/icons/";
@@ -227,7 +223,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 	public void onCreateContextMenu(ContextMenu menu, View v,
 	    ContextMenuInfo menuInfo) {
 		
-		getActivity().getMenuInflater().inflate(R.menu.feed_menu, menu);
+		getActivity().getMenuInflater().inflate(R.menu.context_feed, menu);
 		
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
 
@@ -259,7 +255,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
             m_enableParentBtn = savedInstanceState.getBoolean("enableParentBtn");
 		}
 
-		View view = inflater.inflate(R.layout.feeds_fragment, container, false);
+		View view = inflater.inflate(R.layout.fragment_feeds, container, false);
 		
 		m_swipeLayout = (SwipeRefreshLayout) view.findViewById(R.id.feeds_swipe_container);
 		
@@ -287,50 +283,23 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 
 		m_list = (ListView)view.findViewById(R.id.feeds);
 
-        if (m_activity.isSmallScreen()) {
-            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
-            m_list.addHeaderView(layout);
-        }
+		initDrawerHeader(inflater, view, m_list, m_activity, m_prefs, !m_enableParentBtn);
 
-        if (m_enableParentBtn) {
-            View layout = inflater.inflate(R.layout.feeds_goback, m_list, false);
+		if (m_enableParentBtn) {
+			View layout = inflater.inflate(R.layout.feeds_goback, m_list, false);
 
-            layout.setOnClickListener(new OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    m_activity.getSupportFragmentManager().popBackStack();
-                }
-            });
+			layout.setOnClickListener(new OnClickListener() {
+				@Override
+				public void onClick(View view) {
+					m_activity.getSupportFragmentManager().popBackStack();
+				}
+			});
 
-            m_list.addHeaderView(layout, null, false);
-        } else {
-            // TODO: better check
-            if (m_activity.findViewById(R.id.headlines_drawer) != null) {
-                try {
-                    View layout = inflater.inflate(R.layout.drawer_header, m_list, false);
-                    m_list.addHeaderView(layout, null, false);
+			m_list.addHeaderView(layout, null, false);
+		}
 
-                    TextView login = (TextView) view.findViewById(R.id.drawer_header_login);
-                    TextView server = (TextView) view.findViewById(R.id.drawer_header_server);
-
-                    login.setText(m_prefs.getString("login", ""));
-                    try {
-                        server.setText(new URL(m_prefs.getString("ttrss_url", "")).getHost());
-                    } catch (MalformedURLException e) {
-                        server.setText("");
-                    }
-                } catch (InflateException e) {
-                    // welp couldn't inflate header i guess
-                    e.printStackTrace();
-                } catch (java.lang.UnsupportedOperationException e) {
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        m_adapter = new FeedListAdapter(getActivity(), R.layout.feeds_row, (ArrayList<Feed>)m_feeds);
+		m_adapter = new FeedListAdapter(getActivity(), R.layout.feeds_row, (ArrayList<Feed>)m_feeds);
 		m_list.setAdapter(m_adapter);
-		//list.setEmptyView(view.findViewById(R.id.no_feeds));
 		m_list.setOnItemClickListener(this);
 
 		registerForContextMenu(m_list);
@@ -338,7 +307,10 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
         //m_enableFeedIcons = m_prefs.getBoolean("download_feed_icons", false);
 
         View loadingBar = (View) view.findViewById(R.id.feeds_loading_bar);
-        loadingBar.setVisibility(View.VISIBLE);
+
+		if (loadingBar != null) {
+			loadingBar.setVisibility(View.VISIBLE);
+		}
 
         //Log.d(TAG, "mpTRA=" + m_activity.m_pullToRefreshAttacher);
 		//m_activity.m_pullToRefreshAttacher.addRefreshableView(list, this);
@@ -358,7 +330,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		m_prefs = PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext());
 		m_prefs.registerOnSharedPreferenceChangeListener(this);
 		
-		m_activity = (FeedsActivity)activity;
+		m_activity = (MasterActivity)activity;
 				
 	}
 
@@ -390,14 +362,18 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 		if (list != null) {
             Feed feed = (Feed)list.getItemAtPosition(position);
 
-			if (feed.is_cat) {
-                if (feed.always_display_as_feed) {
-                    m_activity.onCatSelected(new FeedCategory(feed.id, feed.title, feed.unread), true);
-                } else {
-                    m_activity.onCatSelected(new FeedCategory(feed.id, feed.title, feed.unread));
-                }
-			} else {
-				m_activity.onFeedSelected(feed);
+			if (feed != null) {
+				if (feed.is_cat) {
+					if (feed.always_display_as_feed) {
+						m_activity.onCatSelected(new FeedCategory(feed.id, feed.title, feed.unread), true);
+					} else if (feed.id < 0) {
+						m_activity.onCatSelected(new FeedCategory(feed.id, feed.title, feed.unread), false);
+					} else {
+						m_activity.onCatSelected(new FeedCategory(feed.id, feed.title, feed.unread));
+					}
+				} else {
+					m_activity.onFeedSelected(feed);
+				}
 			}
 			
     		m_selectedFeed = feed;
@@ -523,16 +499,10 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 			if (isDetached()) return;
 
 			if (getView() != null) {
-				ListView list = (ListView)getView().findViewById(R.id.feeds);
-			
-				if (list != null) {
-					list.setEmptyView(getView().findViewById(R.id.no_feeds));
-				}
-
                 View loadingBar = getView().findViewById(R.id.feeds_loading_bar);
 
                 if (loadingBar != null) {
-                    loadingBar.setVisibility(View.GONE);
+                    loadingBar.setVisibility(View.INVISIBLE);
                 }
             }
 			
@@ -660,6 +630,36 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 
 			}
 
+			ImageView icon = (ImageView) v.findViewById(R.id.icon);
+
+			if (icon != null) {
+				TypedValue tv = new TypedValue();
+
+				if (feed.id == 0 && !feed.is_cat) {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_archive, tv, true);
+					icon.setImageResource(tv.resourceId);
+				} else if (feed.id == -1 && !feed.is_cat) {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_star, tv, true);
+					icon.setImageResource(tv.resourceId);
+				} else if (feed.id == -2 && !feed.is_cat) {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_checkbox_marked, tv, true);
+					icon.setImageResource(tv.resourceId);
+				} else if (feed.id == -3 && !feed.is_cat) {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_coffee, tv, true);
+					icon.setImageResource(tv.resourceId);
+				} else if (feed.id == -4 && !feed.is_cat) {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_folder_outline, tv, true);
+					icon.setImageResource(tv.resourceId);
+				} else if (feed.is_cat) {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_folder_outline, tv, true);
+					icon.setImageResource(tv.resourceId);
+				} else {
+					m_activity.getTheme().resolveAttribute(R.attr.ic_rss_box, tv, true);
+					icon.setImageResource(tv.resourceId);
+				}
+
+			}
+
 			TextView tt = (TextView) v.findViewById(R.id.title);
 
 			if (tt != null) {
@@ -680,54 +680,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 				tu.setVisibility((feed.unread > 0) ? View.VISIBLE : View.INVISIBLE);
 			}
 			
-			ImageView icon = (ImageView)v.findViewById(R.id.icon);
-			
-			if (icon != null) {
-
-                if ((feed.is_cat && feed.always_display_as_feed) || (!feed.is_cat && feed.id == -4)) {
-                    icon.setImageResource(R.drawable.ic_published_special);
-                /* } else if (m_enableFeedIcons) {
-					
-					try {
-						File storage = m_activity.getExternalCacheDir();
-						
-						File iconFile = new  File(storage.getAbsolutePath() + ICON_PATH + feed.id + ".ico");
-						if (iconFile.exists()) {
-							Bitmap bmpOrig = BitmapFactory.decodeFile(iconFile.getAbsolutePath());		
-							if (bmpOrig != null) {
-								icon.setImageBitmap(bmpOrig);
-							}
-						} else {
-                            if (m_activity.isDarkTheme()) {
-                                icon.setImageResource(R.drawable.ic_published);
-                            } else {
-                                icon.setImageResource(R.drawable.ic_menu_published_dark);
-                            }
-
-							//icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-						}
-					} catch (NullPointerException e) {
-						//icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-                        if (m_activity.isDarkTheme()) {
-                            icon.setImageResource(R.drawable.ic_published);
-                        } else {
-                            icon.setImageResource(R.drawable.ic_menu_published_dark);
-                        }
-					} */
-					
-				} else {
-					//icon.setImageResource(feed.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-
-                    if (m_activity.isDarkTheme()) {
-                        icon.setImageResource(R.drawable.ic_published);
-                    } else {
-                        icon.setImageResource(R.drawable.ic_menu_published_dark);
-                    }
-				}
-				
-			}
-			
-			ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);
+			/*ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);
 			
 			if (ib != null) {
 				ib.setOnClickListener(new OnClickListener() {					
@@ -736,7 +689,7 @@ public class FeedsFragment extends Fragment implements OnItemClickListener, OnSh
 						getActivity().openContextMenu(v);
 					}
 				});								
-			}
+			}*/
 
 			return v;
 		}

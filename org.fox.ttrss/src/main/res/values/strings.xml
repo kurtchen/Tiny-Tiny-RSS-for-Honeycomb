@@ -23,6 +23,7 @@
     <string name="loading_message">Loading, please wait…</string>
     <string name="menu_unread_feeds">Show unread feeds</string>
     <string name="menu_all_feeds">Show all feeds</string>
+    <string name="unread_only">Unread only</string>
     <string name="update_feeds">Refresh</string>
     <string name="article_temp_offline">Article temp offline</string>
     <string name="delete_temp_offline_article">Delete temp offline article</string>
@@ -34,6 +35,7 @@
     <string name="blank"></string>
     <string name="transport_debugging">Log sent and received data</string>
     <string name="article_toggle_marked">(Un)Star</string>
+    <string name="article_toggle_unread">(Un)Read</string>
     <string name="article_toggle_published">(Un)Publish</string>
     <string name="headlines_select">Select articles</string>
     <string name="headlines_select_dialog">Select articles</string>
@@ -82,6 +84,7 @@
     <string name="notify_downloading_articles">Downloading articles (%1$d)…</string>
     <string name="notify_downloading_init">Starting download…</string>
     <string name="notify_downloading_feeds">Downloading feeds…</string>
+    <string name="notify_downloading_categories">Downloading categories…</string>
     <string name="notify_uploading_sending_data">Sending data to server…</string>
     <string name="notify_downloading_title">Preparing offline mode</string>
     <string name="notify_uploading_title">Synchronizing offline data</string>
@@ -222,6 +225,7 @@
 
     <string name="article_link_open_inplace">Open Link In-Place</string>
 
+    <string name="headline_display_mode_compact_noimages">Compact (no images)</string>
     <string name="prefs_version">%1$s (%2$d)</string>
     <string name="prefs_version_title">Version</string>
     <string name="prefs_build_timestamp">%1$s</string>
@@ -230,4 +234,13 @@
     <string name="prefs_widget_show_fresh">Show Fresh articles</string>
     <string name="prefs_widget_show_fresh_summary">Instead of total unread display amount of Fresh articles</string>
     <string name="prefs_widget">Widget</string>
+    <string name="title_activity_video_player">Video Player</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="video_player_share">Share video</string>
+    <string name="video_player_open">Open video</string>
+
+    <string name="flavor_image_prompt">(more images...)</string>
+    <string name="headlines_row_top_changed">New articles found, reload feed to continue.</string>
 </resources>

@@ -23,6 +23,8 @@ import android.view.ViewGroup;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebView.HitTestResult;
+import android.webkit.WebViewClient;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -85,7 +87,7 @@ public class OfflineArticleFragment extends Fragment {
 	public void onCreateContextMenu(ContextMenu menu, View v,
 	    ContextMenuInfo menuInfo) {
 		
-		//getActivity().getMenuInflater().inflate(R.menu.article_link_context_menu, menu);
+		//getActivity().getMenuInflater().inflate(R.menu.context_article_link, menu);
 		//menu.setHeaderTitle(m_cursor.getString(m_cursor.getColumnIndex("title")));
 		
 		String title = m_cursor.getString(m_cursor.getColumnIndex("title"));
@@ -95,7 +97,7 @@ public class OfflineArticleFragment extends Fragment {
 
 			if (result != null && (result.getType() == HitTestResult.IMAGE_TYPE || result.getType() == HitTestResult.SRC_IMAGE_ANCHOR_TYPE)) {
 				menu.setHeaderTitle(result.getExtra());
-				getActivity().getMenuInflater().inflate(R.menu.article_content_img_context_menu, menu);
+				getActivity().getMenuInflater().inflate(R.menu.context_article_content_img, menu);
 				
 				/* FIXME I have no idea how to do this correctly ;( */
 				
@@ -103,11 +105,11 @@ public class OfflineArticleFragment extends Fragment {
 				
 			} else {
 				menu.setHeaderTitle(title);
-				getActivity().getMenuInflater().inflate(R.menu.article_link_context_menu, menu);
+				getActivity().getMenuInflater().inflate(R.menu.context_article_link, menu);
 			}
 		} else {
 			menu.setHeaderTitle(title);
-			getActivity().getMenuInflater().inflate(R.menu.article_link_context_menu, menu);
+			getActivity().getMenuInflater().inflate(R.menu.context_article_link, menu);
 		}
 		
 		super.onCreateContextMenu(menu, v, menuInfo);	
@@ -122,9 +124,9 @@ public class OfflineArticleFragment extends Fragment {
 			m_articleId = savedInstanceState.getInt("articleId");
 		}
 		
-		View view = inflater.inflate(R.layout.article_fragment, container, false);
+		View view = inflater.inflate(R.layout.fragment_article, container, false);
 
-		m_cursor = m_activity.getReadableDb().query("articles LEFT JOIN feeds ON (feed_id = feeds."+BaseColumns._ID+")", 
+		m_cursor = m_activity.getDatabase().query("articles LEFT JOIN feeds ON (feed_id = feeds."+BaseColumns._ID+")", 
 				new String[] { "articles.*", "feeds.title AS feed_title" }, "articles." + BaseColumns._ID + "=?", 
 				new String[] { String.valueOf(m_articleId) }, null, null, null);
 
@@ -146,7 +148,7 @@ public class OfflineArticleFragment extends Fragment {
 
                         if (t >= oldt && t >= ab.getHeight()) {
                             ab.hide();
-                        } else if (t <= ab.getHeight() | oldt - t >= 10) {
+                        } else if (t <= ab.getHeight() || oldt - t >= 10) {
                             ab.show();
                         }
 
@@ -184,18 +186,6 @@ public class OfflineArticleFragment extends Fragment {
 			TextView title = (TextView)view.findViewById(R.id.title);
 
 			if (title != null) {
-				
-				/* if (m_prefs.getBoolean("enable_condensed_fonts", false)) {
-					Typeface tf = TypefaceCache.get(m_activity, "sans-serif-condensed", Typeface.NORMAL);
-					
-					if (tf != null && !tf.equals(title.getTypeface())) {
-						title.setTypeface(tf);
-					}
-					
-					title.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, articleFontSize + 5));
-				} else {
-					title.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, articleFontSize + 3));
-				} */
 
                 title.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.min(21, articleFontSize + 3));
 
@@ -226,7 +216,19 @@ public class OfflineArticleFragment extends Fragment {
 				
 				registerForContextMenu(title);
 			}
-			
+
+			ImageView share = (ImageView)view.findViewById(R.id.share);
+
+			if (share != null) {
+				share.setOnClickListener(new OnClickListener() {
+					@Override
+					public void onClick(View v) {
+						m_activity.shareArticle(m_articleId);
+					}
+				});
+			}
+
+
 			TextView comments = (TextView)view.findViewById(R.id.comments);
 			
 			if (comments != null) {
@@ -242,7 +244,23 @@ public class OfflineArticleFragment extends Fragment {
 			final WebView web = (WebView)view.findViewById(R.id.article_content);
 			
 			if (web != null) {
-				
+
+				web.setWebViewClient(new WebViewClient() {
+					@Override
+					public boolean shouldOverrideUrlLoading(WebView view, String url) {
+						try {
+							Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+							startActivity(intent);
+
+							return true;
+
+						} catch (Exception e){
+							e.printStackTrace();
+						}
+
+						return false;
+					} });
+
 				web.setOnLongClickListener(new View.OnLongClickListener() {
                     @Override
                     public boolean onLongClick(View v) {

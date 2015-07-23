@@ -10,22 +10,19 @@ import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.support.v4.app.Fragment;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.view.InflateException;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -40,25 +37,23 @@ import org.fox.ttrss.types.FeedCategory;
 import org.fox.ttrss.types.FeedCategoryList;
 
 import java.lang.reflect.Type;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 
-public class FeedCategoriesFragment extends Fragment implements OnItemClickListener, OnSharedPreferenceChangeListener {
+public class FeedCategoriesFragment extends BaseFeedlistFragment implements OnItemClickListener, OnSharedPreferenceChangeListener {
 	private final String TAG = this.getClass().getSimpleName();
-	private SharedPreferences m_prefs;
 	private FeedCategoryListAdapter m_adapter;
 	private FeedCategoryList m_cats = new FeedCategoryList();
 	private FeedCategory m_selectedCat;
-	private FeedsActivity m_activity;
+	private MasterActivity m_activity;
 	private SwipeRefreshLayout m_swipeLayout;
     private ListView m_list;
+	protected SharedPreferences m_prefs;
 
-    @SuppressLint("DefaultLocale")
+	@SuppressLint("DefaultLocale")
 	class CatUnreadComparator implements Comparator<FeedCategory> {
 		@Override
 		public int compare(FeedCategory a, FeedCategory b) {
@@ -178,7 +173,7 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 	public void onCreateContextMenu(ContextMenu menu, View v,
 	    ContextMenuInfo menuInfo) {
 		
-		m_activity.getMenuInflater().inflate(R.menu.category_menu, menu);
+		m_activity.getMenuInflater().inflate(R.menu.context_category, menu);
 		
         AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
 		FeedCategory cat = (FeedCategory) m_list.getItemAtPosition(info.position);
@@ -207,7 +202,7 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 			m_cats = savedInstanceState.getParcelable("cats");
 		}	
 		
-		View view = inflater.inflate(R.layout.cats_fragment, container, false);
+		View view = inflater.inflate(R.layout.fragment_cats, container, false);
 		
 		m_swipeLayout = (SwipeRefreshLayout) view.findViewById(R.id.feeds_swipe_container);
 		
@@ -221,40 +216,17 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 		m_list = (ListView)view.findViewById(R.id.feeds);
 		m_adapter = new FeedCategoryListAdapter(getActivity(), R.layout.feeds_row, (ArrayList<FeedCategory>)m_cats);
 
-        if (m_activity.isSmallScreen()) {
-            View layout = inflater.inflate(R.layout.headlines_heading_spacer, m_list, false);
-            m_list.addHeaderView(layout);
-        }
-
-        // TODO: better check
-        if (m_activity.findViewById(R.id.headlines_drawer) != null) {
-            try {
-                View layout = inflater.inflate(R.layout.drawer_header, m_list, false);
-                m_list.addHeaderView(layout, null, false);
-
-                TextView login = (TextView) view.findViewById(R.id.drawer_header_login);
-                TextView server = (TextView) view.findViewById(R.id.drawer_header_server);
-
-                login.setText(m_prefs.getString("login", ""));
-                try {
-                    server.setText(new URL(m_prefs.getString("ttrss_url", "")).getHost());
-                } catch (MalformedURLException e) {
-                    server.setText("");
-                }
-            } catch (InflateException e) {
-                // welp couldn't inflate header i guess
-                e.printStackTrace();
-            } catch (java.lang.UnsupportedOperationException e) {
-                e.printStackTrace();
-            }
-        }
+		initDrawerHeader(inflater, view, m_list, m_activity, m_prefs, true);
 
         m_list.setAdapter(m_adapter);
         m_list.setOnItemClickListener(this);
         registerForContextMenu(m_list);
 
         View loadingBar = (View) view.findViewById(R.id.feeds_loading_bar);
-        loadingBar.setVisibility(View.VISIBLE);
+
+		if (loadingBar != null) {
+			loadingBar.setVisibility(View.VISIBLE);
+		}
 
 		//m_activity.m_pullToRefreshAttacher.addRefreshableView(list, this);
 		
@@ -265,7 +237,7 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 	public void onAttach(Activity activity) {
 		super.onAttach(activity);		
 
-		m_activity = (FeedsActivity)activity;
+		m_activity = (MasterActivity)activity;
 		
 		m_prefs = PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext());
 		m_prefs.registerOnSharedPreferenceChangeListener(this);
@@ -348,16 +320,10 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
             if (m_swipeLayout != null) m_swipeLayout.setRefreshing(false);
 
 			if (getView() != null) {
-				ListView list = (ListView)getView().findViewById(R.id.feeds);
-			
-				if (list != null) {
-					list.setEmptyView(getView().findViewById(R.id.no_feeds));
-				}
-
                 View loadingBar = getView().findViewById(R.id.feeds_loading_bar);
 
                 if (loadingBar != null) {
-                    loadingBar.setVisibility(View.GONE);
+                    loadingBar.setVisibility(View.INVISIBLE);
                 }
             }
 			
@@ -496,6 +462,16 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 
 			}
 
+			ImageView icon = (ImageView) v.findViewById(R.id.icon);
+
+			if (icon != null) {
+				TypedValue tv = new TypedValue();
+
+				m_activity.getTheme().resolveAttribute(R.attr.ic_folder_outline, tv, true);
+				icon.setImageResource(tv.resourceId);
+
+			}
+
 			TextView tt = (TextView) v.findViewById(R.id.title);
 
 			if (tt != null) {
@@ -509,19 +485,7 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 				tu.setVisibility((cat.unread > 0) ? View.VISIBLE : View.INVISIBLE);
 			}
 			
-			ImageView icon = (ImageView)v.findViewById(R.id.icon);
-			
-			if (icon != null) {
-                if (m_activity.isDarkTheme()) {
-                    icon.setImageResource(R.drawable.ic_published);
-                } else {
-                    icon.setImageResource(R.drawable.ic_menu_published_dark);
-                }
-
-				//icon.setImageResource(cat.unread > 0 ? R.drawable.ic_published : R.drawable.ic_unpublished);
-			}
-
-			ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);
+			/*ImageButton ib = (ImageButton) v.findViewById(R.id.feed_menu_button);
 			
 			if (ib != null) {
 				ib.setOnClickListener(new OnClickListener() {					
@@ -530,7 +494,7 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 						getActivity().openContextMenu(v);
 					}
 				});								
-			}
+			} */
 
 			
 			return v;
@@ -552,17 +516,20 @@ public class FeedCategoriesFragment extends Fragment implements OnItemClickListe
 		Log.d(TAG, "onItemClick=" + position);
 		
 		if (list != null) {
+
 			FeedCategory cat = (FeedCategory)list.getItemAtPosition(position);
 
-            if (cat.id < 0) {
-                m_activity.onCatSelected(cat, false);
-            } else {
-                m_activity.onCatSelected(cat);
-            }
+			if (cat != null) {
+				if (cat.id < 0) {
+					m_activity.onCatSelected(cat, false);
+				} else {
+					m_activity.onCatSelected(cat);
+				}
 
-			m_selectedCat = cat;
-			
-			m_adapter.notifyDataSetChanged();
+				m_selectedCat = cat;
+
+				m_adapter.notifyDataSetChanged();
+			}
 		}
 	}
 
