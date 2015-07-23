@@ -14,4 +14,9 @@
         android:id="@+id/article_link_open_inplace"
         app:showAsAction=""
         android:title="@string/article_link_open_inplace"/>
+
+    <item
+        android:id="@+id/article_link_add_todo"
+        app:showAsAction=""
+        android:title="@string/add_todo"/>
 </menu>

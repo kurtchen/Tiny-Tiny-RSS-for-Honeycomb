@@ -605,6 +605,12 @@ public class OnlineActivity extends CommonActivity {
 				copyToClipboard(ap.getSelectedArticle().link);
 			}
 			return true;
+		case R.id.article_link_add_todo:
+			Log.d(TAG, "article_link_add_todo");
+			if (ap != null && ap.getSelectedArticle() != null) {
+				addTodo(ap.getSelectedArticle());
+			}
+			return true;
 		default:
 			Log.d(TAG, "onContextItemSelected, unhandled id=" + item.getItemId());
 			return super.onContextItemSelected(item);
@@ -1375,7 +1381,22 @@ public class OnlineActivity extends CommonActivity {
 					getString(R.string.share_article)));
 		}
 	}
-	
+
+	public void addTodo(Article article) {
+		if (article != null) {
+
+			Intent intent = new Intent("com.kurtchen.android.todo.NEW_TASK_EXTERNAL");
+			intent.putExtra("title", article.title);
+			intent.putExtra("notes", article.link);
+
+			try {
+				startActivity(intent);
+			} catch (ActivityNotFoundException e) {
+				toast("Tomato Do not installed");
+			}
+		}
+	}
+
 	protected Intent getShareIntent(Article article) {
 		Intent intent = new Intent(Intent.ACTION_SEND);
 

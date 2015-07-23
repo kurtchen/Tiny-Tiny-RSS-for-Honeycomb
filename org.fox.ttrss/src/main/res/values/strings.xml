@@ -28,6 +28,7 @@
     <string name="article_temp_offline">Article temp offline</string>
     <string name="delete_temp_offline_article">Delete temp offline article</string>
     <string name="share_article">Share article</string>
+    <string name="add_todo">Add to Tomato Do</string>
     <string name="catchup">Mark read</string>
     <string name="sort_feeds_by_unread">Sort feeds by unread count</string>
     <string name="ssl_trust_any">Accept any certificate</string>

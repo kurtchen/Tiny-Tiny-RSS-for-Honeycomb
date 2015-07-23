@@ -24,6 +24,10 @@
             app:showAsAction=""
             android:title="@string/share_article"/>
         <item
+            android:id="@+id/headlines_add_todo"
+            app:showAsAction=""
+            android:title="@string/add_todo"/>
+        <item
             android:id="@+id/headlines_article_link_open"
             app:showAsAction=""
             android:title="@string/open_article_in_web_browser"/>
